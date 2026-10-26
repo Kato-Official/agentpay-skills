@@ -29,6 +29,7 @@ This repository is everything an agent needs to use Joomjoo, in the format each 
 | Your agent | Do this |
 |---|---|
 | Claude Code, Codex, Cursor, Gemini CLI and any agent that reads skills | `npx skills add Kato-Official/joomjoo-skills` |
+| Claude Code, as a plugin (the skill and the MCP server together) | `claude plugin marketplace add Kato-Official/joomjoo-skills` then `claude plugin install joomjoo@joomjoo`; it asks for your API key once and keeps it in your secure store |
 | Claude Code, by hand | copy `skills/joomjoo/SKILL.md` to `.claude/skills/joomjoo/SKILL.md` in your project or home folder |
 | Anything that reads AGENTS.md (Codex, Cursor, Aider, most agents) | copy `AGENTS.md` next to your agent's code |
 | Any MCP client (Claude Desktop, Cursor, Windsurf, Zed) | add `mcp/joomjoo_mcp_config.json` to your MCP settings, or run `JOOMJOO_API_KEY=mk_live_... npx -y @joomjoo/mcp` |
