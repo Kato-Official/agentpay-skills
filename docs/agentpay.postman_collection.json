@@ -1,6 +1,6 @@
 {
   "info": {
-    "name": "Joomjoo API v1",
+    "name": "AgentPay API v1",
     "description": "The payment layer for AI agents. Issue capped virtual cards and let Mooj complete real checkouts. Set the collection variable `apiKey` to your mk_live_ key, then run any request.",
     "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
   },
@@ -132,7 +132,7 @@
                 "connect"
               ]
             },
-            "description": "A one-hour, single-use link. The cardholder opens it on the phone they will approve purchases with, types their own card once and locks it with a passkey. Joomjoo never holds the number in clear; the security code is never stored."
+            "description": "A one-hour, single-use link. The cardholder opens it on the phone they will approve purchases with, types their own card once and locks it with a passkey. AgentPay never holds the number in clear; the security code is never stored."
           }
         },
         {
@@ -362,7 +362,7 @@
                 "passkey"
               ]
             },
-            "description": "When a checkout stopped with login_check passkey_password: keep the plain signed-in session and never ask the merchant password for the Joomjoo passkey again on this connection."
+            "description": "When a checkout stopped with login_check passkey_password: keep the plain signed-in session and never ask the merchant password for the AgentPay passkey again on this connection."
           }
         },
         {
@@ -381,7 +381,7 @@
                 "{{connectionId}}"
               ]
             },
-            "description": "End the connection: the Joomjoo key is destroyed first, the saved session deleted, the passkey entry removed at the merchant when possible. Poll the connection for passkey_status removed or removed_locally."
+            "description": "End the connection: the AgentPay key is destroyed first, the saved session deleted, the passkey entry removed at the merchant when possible. Poll the connection for passkey_status removed or removed_locally."
           }
         }
       ]

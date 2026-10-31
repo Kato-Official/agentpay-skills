@@ -1,12 +1,12 @@
-# Joomjoo API reference
+# AgentPay API reference
 
-The same reference the Joomjoo console shows under Developer, Docs. Regenerated from the console copy whenever the API changes.
+The same reference the AgentPay console shows under Developer, Docs. Regenerated from the console copy whenever the API changes.
 
-# Joomjoo API
+# AgentPay API
 
-The payment layer for AI agents. Issue a real, capped virtual card and either use it yourself or hand the whole checkout to Joomjoo. Card controls, 3DS, and fraud caps are handled for you.
+The payment layer for AI agents. Issue a real, capped virtual card and either use it yourself or hand the whole checkout to AgentPay. Card controls, 3DS, and fraud caps are handled for you.
 
-The Joomjoo API is organized around REST. It has predictable, resource-oriented URLs, accepts JSON request bodies, returns JSON responses, and uses standard HTTP verbs and status codes. Every response includes an `X-Mooj-Request-Id` header (also echoed as `request_id` in the body) so any call can be traced.
+The AgentPay API is organized around REST. It has predictable, resource-oriented URLs, accepts JSON request bodies, returns JSON responses, and uses standard HTTP verbs and status codes. Every response includes an `X-Mooj-Request-Id` header (also echoed as `request_id` in the body) so any call can be traced.
 
 |  |  |
 | --- | --- |
@@ -21,17 +21,17 @@ Amounts in requests are in **US dollars** (e.g. `"amount": 20` means $20.00). Ca
 
 ## Authentication 
 
-Authenticate every request with your secret API key. Create and manage keys in the Joomjoo console under **Developer → API keys**. Keys look like `mk_live_...` and are shown only once at creation, so store yours securely.
+Authenticate every request with your secret API key. Create and manage keys in the AgentPay console under **Developer → API keys**. Keys look like `mk_live_...` and are shown only once at creation, so store yours securely.
 
 Send the key as a bearer token. Keep it server-side and never commit it to source control; the examples below read it from an environment variable.
 
 Shell
 
 ```
-export JOOMJOO\_API\_KEY="YOUR\_API\_KEY"
+export AGENTPAY\_API\_KEY="YOUR\_API\_KEY"
 # every request sends the bearer header:
 curl https://api.joomjoo.com/v1/spend/example \
--H "Authorization: Bearer $JOOMJOO\_API\_KEY"
+-H "Authorization: Bearer $AGENTPAY\_API\_KEY"
 ```
 
 A missing or invalid key returns 401 `missing_api_key` or `invalid_api_key`. See [Errors](#errors) for the full list.
@@ -46,7 +46,7 @@ cURL
 
 ```
 curl https://api.joomjoo.com/v1/cards \
--H "Authorization: Bearer $JOOMJOO\_API\_KEY" \
+-H "Authorization: Bearer $AGENTPAY\_API\_KEY" \
 -H "Content-Type: application/json" \
 -d '{"amount": 20, "merchant": "namecheap", "single\_use": true}'
 ```
@@ -67,7 +67,7 @@ curl https://api.joomjoo.com/v1/cards \
 }
 ```
 
-From here you can [reveal the card](#reveal-card) to use it yourself, or skip cards entirely and let Joomjoo [complete a checkout](#complete-a-checkout) for you.
+From here you can [reveal the card](#reveal-card) to use it yourself, or skip cards entirely and let AgentPay [complete a checkout](#complete-a-checkout) for you.
 
 ---
 
@@ -83,22 +83,22 @@ To teach your agent these calls in one paste, grab a ready tool file from **Deve
 
 ## Guide: Complete a checkout 
 
-Hand Joomjoo a plain-English task and a spend cap. Joomjoo mints a card, drives the merchant checkout in a real browser, auto-accepts 3DS, and pays. This is asynchronous: you get a `checkout_id` back, then poll it.
+Hand AgentPay a plain-English task and a spend cap. AgentPay mints a card, drives the merchant checkout in a real browser, auto-accepts 3DS, and pays. This is asynchronous: you get a `checkout_id` back, then poll it.
 
 cURL
 
 ```
 # 1. start the checkout (confirm\_pay:false = dry run, stops at review)
 curl https://api.joomjoo.com/v1/checkout \
--H "Authorization: Bearer $JOOMJOO\_API\_KEY" \
+-H "Authorization: Bearer $AGENTPAY\_API\_KEY" \
 -H "Content-Type: application/json" \
--d '{"task":"buy the domain joomjoo.click for 1 year","merchant":"namecheap","amount":20,"confirm\_pay":false}'
+-d '{"task":"buy the domain example.click for 1 year","merchant":"namecheap","amount":20,"confirm\_pay":false}'
 # 2. poll until it finishes
 curl https://api.joomjoo.com/v1/checkout/CHECKOUT\_ID \
--H "Authorization: Bearer $JOOMJOO\_API\_KEY"
+-H "Authorization: Bearer $AGENTPAY\_API\_KEY"
 ```
 
-Set `confirm_pay: true` to have Joomjoo pay autonomously, up to the cap. Poll `status` until it reaches a terminal state:
+Set `confirm_pay: true` to have AgentPay pay autonomously, up to the cap. Poll `status` until it reaches a terminal state:
 
 queued
 running
@@ -111,21 +111,21 @@ canceled
 blocked
 error
 
-`submitted`, `canceled`, `blocked` and `error` are terminal. `awaiting_approval` means the run reached the final review and is waiting for the account owner's yes in the Joomjoo console (or `confirm_pay: true`, within the agent's own approval mode). `needs_answer` is a choice the account owner is being asked in the console.
+`submitted`, `canceled`, `blocked` and `error` are terminal. `awaiting_approval` means the run reached the final review and is waiting for the account owner's yes in the AgentPay console (or `confirm_pay: true`, within the agent's own approval mode). `needs_answer` is a choice the account owner is being asked in the console.
 
-If `status` is `needs_login`, the merchant requires a signed-in session. Set up a reusable login once with [Connections](#connections), then pass its `connection_id` to the checkout. The status carries `login_check` (`signed_out`, `unknown`, or `passkey_password`, see [the Joomjoo passkey](#passkey)), `login_url` (the page the browser stopped on) and `connect_url` (the live window where the person signs in). `login_layer` says whether the run signed in with the saved `session` or the Joomjoo `passkey`.
+If `status` is `needs_login`, the merchant requires a signed-in session. Set up a reusable login once with [Connections](#connections), then pass its `connection_id` to the checkout. The status carries `login_check` (`signed_out`, `unknown`, or `passkey_password`, see [the AgentPay passkey](#passkey)), `login_url` (the page the browser stopped on) and `connect_url` (the live window where the person signs in). `login_layer` says whether the run signed in with the saved `session` or the AgentPay `passkey`.
 
 ## Guide: Connect a merchant login 
 
 Some merchants require an account. A **connection** is a reusable, isolated login your users complete once in a hosted browser session; every future checkout on that connection is already signed in.
 
-1. [`POST /v1/connections`](#create-connection) returns a `connect_url`. Open it so the user signs in on the merchant's own page (Joomjoo never sees the password).
+1. [`POST /v1/connections`](#create-connection) returns a `connect_url`. Open it so the user signs in on the merchant's own page (AgentPay never sees the password).
 2. [`POST /v1/connections/{id}/complete`](#complete-connection) persists the login. The connection becomes connected.
 3. Pass `connection_id` to [`POST /v1/checkout`](#create-checkout) and the run executes signed-in as that user.
 
 ## Guide: Handle events 
 
-Instead of polling, get events pushed to your server the moment they happen. Register an endpoint in the Joomjoo console (Developer -> Webhooks); Joomjoo sends a signed POST for each event.
+Instead of polling, get events pushed to your server the moment they happen. Register an endpoint in the AgentPay console (Developer -> Webhooks); AgentPay sends a signed POST for each event.
 
 ### Events
 
@@ -146,7 +146,7 @@ Each delivery is JSON: `{ "id", "type", "created", "data": { ... } }`.
 
 ### Verify the signature
 
-Every request carries a `Joomjoo-Signature: t=<unix>,v1=<hex>` header (the same value is also sent as `Mooj-Signature` for integrations written before the rename). Recompute it with your endpoint's signing secret (shown once when you create the endpoint) and compare, so you know the event really came from Joomjoo.
+Every request carries a `Joomjoo-Signature: t=<unix>,v1=<hex>` header (the same value is also sent as `Mooj-Signature` for integrations written before the rename). Recompute it with your endpoint's signing secret (shown once when you create the endpoint) and compare, so you know the event really came from AgentPay.
 
 Node, verify
 
@@ -206,7 +206,7 @@ Returns 402 `insufficient_funds` if the cap exceeds your available wallet balanc
 
 GET/v1/cards/{id}
 
-Return the full card number, CVC, and expiry. Reveal only at the moment of use; Joomjoo never logs the PAN.
+Return the full card number, CVC, and expiry. Reveal only at the moment of use; AgentPay never logs the PAN.
 
 200 Response
 
@@ -242,7 +242,7 @@ Close a card and release any unused reserve back to your wallet.
 
 POST/v1/cards/connect
 
-Returns a one-hour, single-use link. Send it to the cardholder: they open it in Safari or Chrome on the phone they will approve purchases with, type their own credit or debit card once, and lock it with a passkey. The card is encrypted on their device before it leaves the page; Joomjoo never holds the number in clear and never stores the security code. Nothing is issued and nothing is prepaid: they keep their points.
+Returns a one-hour, single-use link. Send it to the cardholder: they open it in Safari or Chrome on the phone they will approve purchases with, type their own credit or debit card once, and lock it with a passkey. The card is encrypted on their device before it leaves the page; AgentPay never holds the number in clear and never stores the security code. Nothing is issued and nothing is prepaid: they keep their points.
 
 200 Response
 
@@ -255,7 +255,7 @@ Returns a one-hour, single-use link. Send it to the cardholder: they open it in 
 }
 ```
 
-A connected card pays only after the cardholder approves each purchase on that phone: the checkout stops at the review, `GET /v1/checkout/{id}` answers `needs_card_approval` with an `approval_url`, and the `checkout.needs_card_approval` event carries the same link. The bank's own check (3-D Secure) on a connected card is not cleared by Joomjoo; the cardholder completes it on the agent's screen.
+A connected card pays only after the cardholder approves each purchase on that phone: the checkout stops at the review, `GET /v1/checkout/{id}` answers `needs_card_approval` with an `approval_url`, and the `checkout.needs_card_approval` event carries the same link. The bank's own check (3-D Secure) on a connected card is not cleared by AgentPay; the cardholder completes it on the agent's screen.
 
 ### List cards
 
@@ -312,7 +312,7 @@ declined
 
 POST/v1/checkout
 
-Asynchronous. Joomjoo mints a card, drives the merchant checkout, handles 3DS, and (if authorized) pays. Returns a `checkout_id` to poll.
+Asynchronous. AgentPay mints a card, drives the merchant checkout, handles 3DS, and (if authorized) pays. Returns a `checkout_id` to poll.
 
 | Field | Type | Req | Description |
 | --- | --- | --- | --- |
@@ -346,7 +346,7 @@ GET/v1/checkout/{checkout\_id}
 {
 "checkout\_id": "run\_7a1e...",
 "status": "awaiting\_approval",
-"task": "buy the domain joomjoo.click for 1 year",
+"task": "buy the domain example.click for 1 year",
 "merchant": "namecheap",
 "amount": 20,
 "card\_last4": "4775",
@@ -417,11 +417,11 @@ List all connections, or poll a single connection's status (`pending` / `connect
 }
 ```
 
-### The Joomjoo passkey
+### The AgentPay passkey
 
-On merchants that take passkeys (Amazon first), Joomjoo adds its own passkey to the person's account the next time a checkout runs on a connection, and from then on every checkout signs in by itself, even after the merchant expires the session. Nothing changes in your calls. `layer` is `passkey` once that happened, `session` before (the plain signed-in session). `passkey_status` walks through `none`, `enrolling`, `awaiting_password`, `pending`, `connected` or `connected_unmanaged` (the merchant shows no identifier Joomjoo can use to delete the entry remotely), `failed`, `needs_person`, `login_failed`, and on disconnect `removing`, `removed` or `removed_locally`. A checkout's `login_layer` says which layer signed in.
+On merchants that take passkeys (Amazon first), AgentPay adds its own passkey to the person's account the next time a checkout runs on a connection, and from then on every checkout signs in by itself, even after the merchant expires the session. Nothing changes in your calls. `layer` is `passkey` once that happened, `session` before (the plain signed-in session). `passkey_status` walks through `none`, `enrolling`, `awaiting_password`, `pending`, `connected` or `connected_unmanaged` (the merchant shows no identifier AgentPay can use to delete the entry remotely), `failed`, `needs_person`, `login_failed`, and on disconnect `removing`, `removed` or `removed_locally`. A checkout's `login_layer` says which layer signed in.
 
-Some merchants ask for the account password once before a passkey can be added. The checkout then stops with `needs_login` and `login_check: "passkey_password"`: the person is signed in; they type the password at `connect_url` (Joomjoo never stores it) and you start the checkout again on the same connection, or you skip it below and the connection stays on the session layer.
+Some merchants ask for the account password once before a passkey can be added. The checkout then stops with `needs_login` and `login_check: "passkey_password"`: the person is signed in; they type the password at `connect_url` (AgentPay never stores it) and you start the checkout again on the same connection, or you skip it below and the connection stays on the session layer.
 
 ### Skip the passkey password
 
@@ -445,7 +445,7 @@ POST/v1/connections/{id}/passkey
 
 DELETE/v1/connections/{id}
 
-Ends the connection. The Joomjoo key is destroyed first, so nothing can sign in with it from that moment; the saved session is deleted; the entry at the merchant is removed when Joomjoo can. Poll the connection: `passkey_status` ends `removed`, or `removed_locally` when the person has to remove the entry named `Joomjoo-...` in the merchant's security settings themselves. Idempotent.
+Ends the connection. The AgentPay key is destroyed first, so nothing can sign in with it from that moment; the saved session is deleted; the entry at the merchant is removed when AgentPay can. Poll the connection: `passkey_status` ends `removed`, or `removed_locally` when the person has to remove the entry named `AgentPay-...` in the merchant's security settings themselves. Idempotent.
 
 200 Response
 
@@ -488,7 +488,7 @@ POST/v1/wallet/funding-sessions
 | Field | Type | Req | Description |
 | --- | --- | --- | --- |
 | amount | number | yes | Dollars to add. |
-| success\_url | string | no | Where the person lands after paying, https. Defaults to the Joomjoo console. |
+| success\_url | string | no | Where the person lands after paying, https. Defaults to the AgentPay console. |
 | cancel\_url | string | no | Where the person lands if they cancel, https. |
 
 200 Response
@@ -530,7 +530,7 @@ POST/v1/wallet/bank-transfers
 "rail": "wire\_domestic",
 "reference\_code": "7K2QW9PD",
 "pending\_balance": 500,
-"instructions": { "beneficiary\_name": "Joomjoo, LLC", "account\_number": "...", "routing\_number": "...", "reference": "7K2QW9PD" }
+"instructions": { "beneficiary\_name": "AgentPay, LLC", "account\_number": "...", "routing\_number": "...", "reference": "7K2QW9PD" }
 }
 ```
 
@@ -538,7 +538,7 @@ Show the person `instructions`. The reference code goes in the transfer memo. Th
 
 ## Errors 
 
-Joomjoo uses conventional HTTP status codes. The body carries a machine-readable string and a `request_id`.
+AgentPay uses conventional HTTP status codes. The body carries a machine-readable string and a `request_id`.
 
 | Status | Meaning |
 | --- | --- |
@@ -564,12 +564,12 @@ Error body
 
 ## Postman collection 
 
-Prefer to click instead of curl? Import the Joomjoo collection into Postman and every endpoint is ready to run.
+Prefer to click instead of curl? Import the AgentPay collection into Postman and every endpoint is ready to run.
 
 Import URL
 
 ```
-https://joomjoo.com/docs/joomjoo.postman\_collection.json
+https://agentpay.global/docs/agentpay.postman\_collection.json
 ```
 
 1. In Postman, choose **Import** and paste the URL above (or download and drop the file in).
@@ -580,13 +580,13 @@ The collection sets `Authorization: Bearer {{apiKey}}` at the collection level, 
 
 ## Agent skills 
 
-Everything below is also one public repository, [github.com/Kato-Official/joomjoo-skills](https://github.com/Kato-Official/joomjoo-skills), with the full reference and the Postman collection. Install the skill into any agent (Claude Code, Codex, Cursor, Gemini CLI and more) with `npx skills add Kato-Official/joomjoo-skills`.
+Everything below is also one public repository, [github.com/Kato-Official/agentpay-skills](https://github.com/Kato-Official/agentpay-skills), with the full reference and the Postman collection. Install the skill into any agent (Claude Code, Codex, Cursor, Gemini CLI and more) with `npx skills add Kato-Official/agentpay-skills`.
 
-Teach your agent to use Joomjoo in one paste. The Joomjoo console (**Developer → Agent skills**) ships ready tool files for each stack:
+Teach your agent to use AgentPay in one paste. The AgentPay console (**Developer → Agent skills**) ships ready tool files for each stack:
 
 Claude Code / AGENTS.md
 
-Two files: `SKILL.md` (save as `.claude/skills/joomjoo/SKILL.md`, Claude Code loads it by itself) and `AGENTS.md` (drop next to your agent's code; Codex, Cursor and most agents read it). Both carry the four tools, the ten checkout statuses and the rules.
+Two files: `SKILL.md` (save as `.claude/skills/agentpay/SKILL.md`, Claude Code loads it by itself) and `AGENTS.md` (drop next to your agent's code; Codex, Cursor and most agents read it). Both carry the four tools, the ten checkout statuses and the rules.
 
 Anthropic tool-use
 
@@ -608,30 +608,30 @@ Official SDKs wrap this API so you do not have to hand-roll requests. Same surfa
 
 Node
 
-`npm install @joomjoo/sdk` · [npmjs.com/package/@joomjoo/sdk](https://www.npmjs.com/package/@joomjoo/sdk)
+`npm install @agentpay-global/sdk` · [npmjs.com/package/@agentpay-global/sdk](https://www.npmjs.com/package/@agentpay-global/sdk)
 
 Python
 
-`pip install joomjoo` · [pypi.org/project/joomjoo](https://pypi.org/project/joomjoo/)
+`pip install agentpay-global` · [pypi.org/project/agentpay-global](https://pypi.org/project/agentpay-global/)
 
 MCP server
 
-`npx -y @joomjoo/mcp` · [npmjs.com/package/@joomjoo/mcp](https://www.npmjs.com/package/@joomjoo/mcp)
+`npx -y @agentpay-global/mcp` · [npmjs.com/package/@agentpay-global/mcp](https://www.npmjs.com/package/@agentpay-global/mcp)
 
 Node
 
 ```
-import { Joomjoo } from "@joomjoo/sdk";
-const joomjoo = new Joomjoo(process.env.JOOMJOO\_API\_KEY);
-const card = await joomjoo.cards.create({ amount: 20, merchant: "namecheap", single\_use: true });
+import { AgentPay } from "@agentpay-global/sdk";
+const agentpay = new AgentPay(process.env.AGENTPAY\_API\_KEY);
+const card = await agentpay.cards.create({ amount: 20, merchant: "namecheap", single\_use: true });
 ```
 
 Python
 
 ```
-from joomjoo import Joomjoo
-joomjoo = Joomjoo(api\_key=os.environ["JOOMJOO\_API\_KEY"])
-card = joomjoo.cards.create(amount=20, merchant="namecheap", single\_use=True)
+from agentpay import AgentPay
+agentpay = AgentPay(api\_key=os.environ["AGENTPAY\_API\_KEY"])
+card = agentpay.cards.create(amount=20, merchant="namecheap", single\_use=True)
 ```
 
 Agent (MCP)
@@ -639,13 +639,13 @@ Agent (MCP)
 ```
 {
 "mcpServers": {
-"joomjoo": {
+"agentpay": {
 "command": "npx",
-"args": ["-y", "@joomjoo/mcp"],
-"env": { "JOOMJOO\_API\_KEY": "YOUR\_API\_KEY" }
+"args": ["-y", "@agentpay-global/mcp"],
+"env": { "AGENTPAY\_API\_KEY": "YOUR\_API\_KEY" }
 }
 }
 }
 ```
 
-Joomjoo API v1 · Base URL `https://api.joomjoo.com` · Questions? Reach the team from the console.
+AgentPay API v1 · Base URL `https://api.joomjoo.com` · Questions? Reach the team from the console.

@@ -1,0 +1,11 @@
+{
+  "mcpServers": {
+    "agentpay": {
+      "command": "npx",
+      "args": ["-y", "@agentpay-global/mcp"],
+      "env": {
+        "AGENTPAY_API_KEY": "mk_live_your_key_here"
+      }
+    }
+  }
+}

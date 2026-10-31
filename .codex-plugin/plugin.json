@@ -1,35 +1,35 @@
 {
-  "name": "joomjoo",
-  "version": "0.2.0",
+  "name": "agentpay",
+  "version": "0.3.0",
   "description": "Payments for AI agents. Your agent gets its own card with a limit you set, clears the bank's 3DS check itself, and checks out in its own browser.",
   "author": {
-    "name": "Joomjoo",
+    "name": "AgentPay",
     "email": "support@joomjoo.com",
-    "url": "https://joomjoo.com"
+    "url": "https://agentpay.global"
   },
-  "homepage": "https://joomjoo.com",
-  "repository": "https://github.com/Kato-Official/joomjoo-skills",
+  "homepage": "https://agentpay.global",
+  "repository": "https://github.com/Kato-Official/agentpay-skills",
   "license": "MIT",
   "keywords": ["payments", "ai-agents", "virtual-cards", "checkout", "3ds"],
   "skills": "./skills/",
   "interface": {
-    "displayName": "Joomjoo",
+    "displayName": "AgentPay",
     "shortDescription": "Payments for AI agents",
-    "longDescription": "Give your agent its own payment card with a limit you set. Joomjoo mints a single-use card at the final review, clears the bank's 3DS check itself, and checks out in its own browser. Two modes: Asks you first, where every purchase waits for your yes, and Buys on its own, never past a card's limit. This plugin teaches the agent the six Joomjoo tools and the API; you bring your own API key from app.joomjoo.com.",
-    "developerName": "Joomjoo",
+    "longDescription": "Give your agent its own payment card with a limit you set. AgentPay mints a single-use card at the final review, clears the bank's 3DS check itself, and checks out in its own browser. Two modes: Asks you first, where every purchase waits for your yes, and Buys on its own, never past a card's limit. This plugin teaches the agent the six AgentPay tools and the API; you bring your own API key from app.agentpay.global.",
+    "developerName": "AgentPay",
     "category": "productivity",
     "capabilities": ["Read", "Write"],
     "composerIcon": "./assets/icon.png",
     "logo": "./assets/logo.png",
     "brandColor": "#1F7C93",
-    "websiteURL": "https://joomjoo.com",
-    "supportURL": "https://joomjoo.com/contact.html",
-    "privacyPolicyURL": "https://joomjoo.com/legal/privacy.html",
-    "termsOfServiceURL": "https://joomjoo.com/legal/terms.html",
+    "websiteURL": "https://agentpay.global",
+    "supportURL": "https://agentpay.global/contact.html",
+    "privacyPolicyURL": "https://agentpay.global/legal/privacy.html",
+    "termsOfServiceURL": "https://agentpay.global/legal/terms.html",
     "defaultPrompt": [
-      "Check my Joomjoo wallet balance",
+      "Check my AgentPay wallet balance",
       "Buy the domain example.click for one year on Namecheap, cap 20 dollars, ask me before paying",
-      "Did the last Joomjoo purchase go through?"
+      "Did the last AgentPay purchase go through?"
     ]
   }
 }

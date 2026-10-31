@@ -1,29 +1,29 @@
 {
-  "name": "joomjoo",
-  "displayName": "Joomjoo",
-  "version": "0.2.0",
+  "name": "agentpay",
+  "displayName": "AgentPay",
+  "version": "0.3.0",
   "description": "Payments for AI agents. Your agent gets its own card with a limit you set, clears the bank's 3DS check itself, and checks out in its own browser.",
   "author": {
-    "name": "Joomjoo",
+    "name": "AgentPay",
     "email": "support@joomjoo.com",
-    "url": "https://joomjoo.com"
+    "url": "https://agentpay.global"
   },
-  "homepage": "https://github.com/Kato-Official/joomjoo-skills",
-  "repository": "https://github.com/Kato-Official/joomjoo-skills",
+  "homepage": "https://github.com/Kato-Official/agentpay-skills",
+  "repository": "https://github.com/Kato-Official/agentpay-skills",
   "license": "MIT",
   "keywords": ["payments", "ai-agents", "virtual-cards", "checkout", "3ds", "mcp"],
   "icon": "./assets/icon.png",
-  "documentationUrl": "https://github.com/Kato-Official/joomjoo-skills/blob/main/docs/api-reference.md",
-  "supportUrl": "https://joomjoo.com/contact.html",
-  "privacyPolicyUrl": "https://joomjoo.com/legal/privacy.html",
-  "termsOfServiceUrl": "https://joomjoo.com/legal/terms.html",
+  "documentationUrl": "https://github.com/Kato-Official/agentpay-skills/blob/main/docs/api-reference.md",
+  "supportUrl": "https://agentpay.global/contact.html",
+  "privacyPolicyUrl": "https://agentpay.global/legal/privacy.html",
+  "termsOfServiceUrl": "https://agentpay.global/legal/terms.html",
   "skills": "./skills/",
   "mcpServers": "./.mcp.json",
   "userConfig": {
-    "joomjoo_api_key": {
+    "agentpay_api_key": {
       "type": "string",
-      "title": "Joomjoo API key",
-      "description": "Your mk_live_ key from app.joomjoo.com, Developer, API keys. Stored in your secure credential store, never in a file.",
+      "title": "AgentPay API key",
+      "description": "Your mk_live_ key from app.agentpay.global, Developer, API keys. Stored in your secure credential store, never in a file.",
       "sensitive": true,
       "required": true
     }

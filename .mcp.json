@@ -1,10 +1,10 @@
 {
   "mcpServers": {
-    "joomjoo": {
+    "agentpay": {
       "command": "npx",
-      "args": ["-y", "@joomjoo/mcp@0.2.0"],
+      "args": ["-y", "@agentpay-global/mcp@0.3.0"],
       "env": {
-        "JOOMJOO_API_KEY": "${user_config.joomjoo_api_key}"
+        "AGENTPAY_API_KEY": "${user_config.agentpay_api_key}"
       }
     }
   }

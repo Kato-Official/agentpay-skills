@@ -3,7 +3,7 @@
     "type": "function",
     "function": {
       "name": "issue_card",
-      "description": "Issue a real virtual card capped at `amount` USD for a specific merchant. Returns the card details and a spend_request_id. Use single_use=true for a one-time purchase (the card auto-freezes after the first charge). Base URL https://api.joomjoo.com ; send header Authorization: Bearer $JOOMJOO_API_KEY. Maps to POST /v1/cards.",
+      "description": "Issue a real virtual card capped at `amount` USD for a specific merchant. Returns the card details and a spend_request_id. Use single_use=true for a one-time purchase (the card auto-freezes after the first charge). Base URL https://api.joomjoo.com ; send header Authorization: Bearer $AGENTPAY_API_KEY. Maps to POST /v1/cards.",
       "parameters": {
         "type": "object",
         "properties": {
@@ -31,7 +31,7 @@
     "type": "function",
     "function": {
       "name": "complete_purchase",
-      "description": "Hand Joomjoo a plain-English purchase task and a spend cap. Joomjoo mints a card, drives the merchant checkout in a real browser, auto-handles 3DS, and pays. Async: returns a checkout_id to poll with get_checkout_status. confirm_pay=false stops at the final review without charging. Maps to POST /v1/checkout.",
+      "description": "Hand AgentPay a plain-English purchase task and a spend cap. AgentPay mints a card, drives the merchant checkout in a real browser, auto-handles 3DS, and pays. Async: returns a checkout_id to poll with get_checkout_status. confirm_pay=false stops at the final review without charging. Maps to POST /v1/checkout.",
       "parameters": {
         "type": "object",
         "properties": {
