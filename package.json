@@ -1,0 +1,8 @@
+{
+  "name": "agentpay-plugin",
+  "private": true,
+  "description": "Lockfile holder for the AgentPay plugin: pins the MCP server the plugin launches with npx.",
+  "dependencies": {
+    "@agentpay-global/mcp": "0.3.0"
+  }
+}
