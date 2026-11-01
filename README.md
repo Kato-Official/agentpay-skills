@@ -39,6 +39,10 @@ This repository is everything an agent needs to use AgentPay, in the format each
 
 Every file reads the key from the `AGENTPAY_API_KEY` environment variable, so the file itself is safe to commit. Get a key at [app.agentpay.global](https://app.agentpay.global), Developer, API keys. Sign-up is open and free to start.
 
+## Where the data goes
+
+Every file in this repository talks to exactly one service: the AgentPay API at `https://api.joomjoo.com`, run by Joomjoo LLC. The skill and the tool files call it directly with the person's API key; the MCP server calls the same API on the agent's behalf. Tasks, merchant names, amounts and the resulting orders are stored in the person's AgentPay account so they can review and approve purchases in the console. Nothing is sent anywhere else. Privacy policy: https://agentpay.global/legal/privacy.html
+
 ## The six tools
 
 | Tool | What it does | Returns |
