@@ -1,651 +1,1246 @@
 # AgentPay API reference
 
-The same reference the AgentPay console shows under Developer, Docs. Regenerated from the console copy whenever the API changes.
+Generated from the same specs as the docs site. The full documentation, with guides, SDKs and runnable examples, is at https://agentpay.global/docs/
 
-# AgentPay API
-
-The payment layer for AI agents. Issue a real, capped virtual card and either use it yourself or hand the whole checkout to AgentPay. Card controls, 3DS, and fraud caps are handled for you.
-
-The AgentPay API is organized around REST. It has predictable, resource-oriented URLs, accepts JSON request bodies, returns JSON responses, and uses standard HTTP verbs and status codes. Every response includes an `X-Mooj-Request-Id` header (also echoed as `request_id` in the body) so any call can be traced.
-
-|  |  |
+| | |
 | --- | --- |
-| Base URL | `https://api.joomjoo.com` |
-| Version | All endpoints are under `/v1`. |
-| Auth | Bearer API key in the `Authorization` header. |
-| Content type | `application/json` for all request bodies. |
+| **Base URL** | `https://api.joomjoo.com` |
+| **Version** | Every endpoint is under `/v1`. |
+| **Auth** | `Authorization: Bearer mk_live_...` on every request. See [authentication](https://agentpay.global/docs/authentication/). |
+| **Content type** | `application/json` for every request body. |
+| **Amounts** | US dollars as plain numbers: `"amount": 20` is $20.00. Card and wallet math is exact to the cent internally. |
+| **Request ids** | Every response carries `X-Mooj-Request-Id`, echoed as `request_id` in the body. |
 
-Amounts in requests are in **US dollars** (e.g. `"amount": 20` means $20.00). Card and wallet math is exact to the cent internally.
+> The host still carries the company's older name. `api.joomjoo.com` is the AgentPay API, and the older Cloud Run address keeps answering for integrations written before the rename.
 
----
+## Endpoints
 
-## Authentication 
+- [Create a card](https://agentpay.global/docs/api-reference/cards/create/): mint a Visa or Mastercard virtual card capped at an amount.
+- [Reveal a card](https://agentpay.global/docs/api-reference/cards/reveal/): the full number, security code and expiry, once.
+- [Close a card](https://agentpay.global/docs/api-reference/cards/close/): release the unused reserve.
+- [List cards](https://agentpay.global/docs/api-reference/cards/list/): connected and issued cards on the account.
+- [Connect the person's own card](https://agentpay.global/docs/api-reference/cards/connect/): a one-hour link for the cardholder.
+- [Remove a connected card](https://agentpay.global/docs/api-reference/cards/remove/).
+- [Get spend status](https://agentpay.global/docs/api-reference/spend/get/): was an issued card charged.
+- [Start a checkout](https://agentpay.global/docs/api-reference/checkout/create/): hand AgentPay the whole purchase.
+- [Get checkout status](https://agentpay.global/docs/api-reference/checkout/get/): poll a run until it ends.
+- [Create a connection](https://agentpay.global/docs/api-reference/connections/create/), [complete](https://agentpay.global/docs/api-reference/connections/complete/), [list](https://agentpay.global/docs/api-reference/connections/list/), [get](https://agentpay.global/docs/api-reference/connections/get/), [skip the passkey password](https://agentpay.global/docs/api-reference/connections/passkey/), [disconnect](https://agentpay.global/docs/api-reference/connections/delete/).
+- [Read the wallet](https://agentpay.global/docs/api-reference/wallet/get/), [top up by card or stablecoin](https://agentpay.global/docs/api-reference/wallet/funding-sessions/), [top up by bank transfer](https://agentpay.global/docs/api-reference/wallet/bank-transfers/).
+- [Webhook events](https://agentpay.global/docs/api-reference/webhooks/events/) and [signature verification](https://agentpay.global/docs/api-reference/webhooks/verify/).
+- [Errors](https://agentpay.global/docs/api-reference/errors/).
 
-Authenticate every request with your secret API key. Create and manage keys in the AgentPay console under **Developer → API keys**. Keys look like `mk_live_...` and are shown only once at creation, so store yours securely.
+## Idempotency
 
-Send the key as a bearer token. Keep it server-side and never commit it to source control; the examples below read it from an environment variable.
+`POST /v1/checkout` and `POST /v1/wallet/bank-transfers` take an `idempotency_key`, your own reference for the operation. A retry with the same key returns the same checkout or declaration instead of creating a second one. Always send one on a checkout.
 
-Shell
+## Lookups never leak
 
-```
-export AGENTPAY\_API\_KEY="YOUR\_API\_KEY"
-# every request sends the bearer header:
-curl https://api.joomjoo.com/v1/spend/example \
--H "Authorization: Bearer $AGENTPAY\_API\_KEY"
-```
+A card, spend, checkout or connection that belongs to another account answers 404 with the same body as one that does not exist.
 
-A missing or invalid key returns 401 `missing_api_key` or `invalid_api_key`. See [Errors](#errors) for the full list.
+## No test mode
 
----
+Every call is live. A card you create is real and reserves its cap; a checkout you start buys. Use a small cap to try things, and close cards you do not use.
 
-## Quickstart 
+## Authentication
 
-Issue your first card in one call. The response comes back with a real, usable card capped at the amount you set.
+Every request carries `Authorization: Bearer mk_live_...`. Keys are created in the AgentPay console under Developer, API keys, shown once. A missing key answers 401 `missing_api_key`, an unknown one 401 `invalid_api_key`, an expired one 401 `expired_api_key` with `expired_at`. Every response carries `X-Mooj-Request-Id`, echoed as `request_id`.
 
-cURL
-
-```
-curl https://api.joomjoo.com/v1/cards \
--H "Authorization: Bearer $AGENTPAY\_API\_KEY" \
--H "Content-Type: application/json" \
--d '{"amount": 20, "merchant": "namecheap", "single\_use": true}'
-```
-
-200 Response
-
-```
-{
-"id": "card\_8f2a...",
-"brand": "visa",
-"last4": "8339",
-"exp\_month": 4,
-"exp\_year": 2033,
-"spend\_limit": 20,
-"single\_use": true,
-"status": "ACTIVE",
-"spend\_request\_id": "spr\_1c9d..."
-}
-```
-
-From here you can [reveal the card](#reveal-card) to use it yourself, or skip cards entirely and let AgentPay [complete a checkout](#complete-a-checkout) for you.
-
----
-
-## Guide: Give your agent a card 
-
-The safest way to let an agent spend is a single-use card capped at exactly what the purchase should cost. It auto-freezes after the first charge, so it cannot be reused or over-spent.
-
-1. **Issue** a card with [`POST /v1/cards`](#create-card), setting `single_use: true` and `amount` to the cap.
-2. **Reveal** the number with [`GET /v1/cards/{id}`](#reveal-card) only at the moment of use.
-3. **Check** the result with [`GET /v1/spend/{spend_request_id}`](#get-spend) (`authorized` / `cleared` / `declined`).
-
-To teach your agent these calls in one paste, grab a ready tool file from **Developer → Agent skills** (Claude, OpenAI, and Gemini schemas). See [Agent skills](#agent-skills).
-
-## Guide: Complete a checkout 
-
-Hand AgentPay a plain-English task and a spend cap. AgentPay mints a card, drives the merchant checkout in a real browser, auto-accepts 3DS, and pays. This is asynchronous: you get a `checkout_id` back, then poll it.
-
-cURL
-
-```
-# 1. start the checkout (confirm\_pay:false = dry run, stops at review)
-curl https://api.joomjoo.com/v1/checkout \
--H "Authorization: Bearer $AGENTPAY\_API\_KEY" \
--H "Content-Type: application/json" \
--d '{"task":"buy the domain example.click for 1 year","merchant":"namecheap","amount":20,"confirm\_pay":false}'
-# 2. poll until it finishes
-curl https://api.joomjoo.com/v1/checkout/CHECKOUT\_ID \
--H "Authorization: Bearer $AGENTPAY\_API\_KEY"
-```
-
-Set `confirm_pay: true` to have AgentPay pay autonomously, up to the cap. Poll `status` until it reaches a terminal state:
-
-queued
-running
-needs\_login
-needs\_answer
-awaiting\_approval
-paying
-submitted
-canceled
-blocked
-error
-
-`submitted`, `canceled`, `blocked` and `error` are terminal. `awaiting_approval` means the run reached the final review and is waiting for the account owner's yes in the AgentPay console (or `confirm_pay: true`, within the agent's own approval mode). `needs_answer` is a choice the account owner is being asked in the console.
-
-If `status` is `needs_login`, the merchant requires a signed-in session. Set up a reusable login once with [Connections](#connections), then pass its `connection_id` to the checkout. The status carries `login_check` (`signed_out`, `unknown`, or `passkey_password`, see [the AgentPay passkey](#passkey)), `login_url` (the page the browser stopped on) and `connect_url` (the live window where the person signs in). `login_layer` says whether the run signed in with the saved `session` or the AgentPay `passkey`.
-
-## Guide: Connect a merchant login 
-
-Some merchants require an account. A **connection** is a reusable, isolated login your users complete once in a hosted browser session; every future checkout on that connection is already signed in.
-
-1. [`POST /v1/connections`](#create-connection) returns a `connect_url`. Open it so the user signs in on the merchant's own page (AgentPay never sees the password).
-2. [`POST /v1/connections/{id}/complete`](#complete-connection) persists the login. The connection becomes connected.
-3. Pass `connection_id` to [`POST /v1/checkout`](#create-checkout) and the run executes signed-in as that user.
-
-## Guide: Handle events 
-
-Instead of polling, get events pushed to your server the moment they happen. Register an endpoint in the AgentPay console (Developer -> Webhooks); AgentPay sends a signed POST for each event.
-
-### Events
-
-card.authorized
-card.cleared
-card.declined
-checkout.submitted
-checkout.needs\_login
-checkout.needs\_card\_approval
-checkout.blocked
-money.funded
-
-`checkout.needs_card_approval` fires when a checkout paid with a connected card reaches the review: `approval_url` (send it to the cardholder), `approval_expires_at`, `amount_display`, `card_last4`.
-
-`money.funded` fires when a top-up lands in the wallet, by card, stablecoin or bank, with `amount`, `method` and `balance_after`.
-
-Each delivery is JSON: `{ "id", "type", "created", "data": { ... } }`.
-
-### Verify the signature
-
-Every request carries a `Joomjoo-Signature: t=<unix>,v1=<hex>` header (the same value is also sent as `Mooj-Signature` for integrations written before the rename). Recompute it with your endpoint's signing secret (shown once when you create the endpoint) and compare, so you know the event really came from AgentPay.
-
-Node, verify
-
-```
-import crypto from "node:crypto";
-function verify(rawBody, header, secret) {
-const [t, v1] = header.split(",").map(p => p.split("=")[1]);
-const expected = crypto.createHmac("sha256", secret)
-.update(`${t}.${rawBody}`).digest("hex");
-return crypto.timingSafeEqual(Buffer.from(expected), Buffer.from(v1));
-}
-```
-
-Failed deliveries retry automatically. You can still poll [`GET /v1/spend/{id}`](#get-spend) and [`GET /v1/checkout/{id}`](#get-checkout) at any time.
-
----
-
-# API reference
-
-Every live endpoint, its parameters, and an example response. All requests require the `Authorization: Bearer` header from [Authentication](#authentication).
-
-## Cards 
+## Cards
 
 ### Create a card
 
-POST/v1/cards
+`POST /v1/cards`
 
-Mint a virtual card capped at `amount` (USD) for a merchant.
+Mint a virtual card capped at amount, dedicated to one merchant. The response is a real card; reveal the number with GET /v1/cards/{id}.
 
-| Field | Type | Req | Description |
-| --- | --- | --- | --- |
-| amount | number | yes | Spend cap in US dollars. Per-card ceiling is $5,000. |
-| merchant | string | yes | Merchant the card is for, e.g. `namecheap`. |
-| single\_use | boolean | no | Default `true`. Auto-freezes after the first charge. |
-| network | string | no | `auto` (default), `visa`, or `mastercard`. |
-| card\_name | string | no | Label for the card in your dashboard. |
+**Body** (application/json)
 
-200 Response
+| Field | Type | Description |
+| --- | --- | --- |
+| `amount` | number, required | The spend cap in US dollars, above zero. The per-card ceiling is 5,000. |
+| `merchant` | string | The merchant the card is for, e.g. `namecheap`. Shown in the console. Defaults to `agent`. |
+| `single_use` | boolean, default `true` | A single-use card freezes itself after its first charge. `false` mints a multi-use card that takes charges until the cap is reached or you close it. |
+| `network` | string, default `auto` | Which network to mint on. One of `auto`, `visa`, `mastercard`. |
+| `card_name` | string | A label for the card in the console, up to 60 characters. Defaults to `API - {merchant}`. |
 
-```
+**Response** 200
+
+| Field | Type | Description |
+| --- | --- | --- |
+| `id` | string | The card id. Use it to reveal or close the card. |
+| `brand` | string | The network the card was minted on. One of `visa`, `mastercard`. |
+| `last4` | string | The last four digits. |
+| `exp_month` | integer | Expiry month, 1 to 12. |
+| `exp_year` | integer | Expiry year, four digits. |
+| `spend_limit` | number | The cap in dollars, as requested. |
+| `single_use` | boolean | Whether the card freezes after its first charge. |
+| `status` | string | The card status, `ACTIVE` on creation. |
+| `spend_request_id` | string | Pass it to `GET /v1/spend/{spend_request_id}` to learn whether the card was charged. |
+| `request_id` | string | The request id, also in the `X-Mooj-Request-Id` header. |
+
+```json
 {
-"id": "card\_8f2a...",
-"brand": "visa",
-"last4": "8339",
-"exp\_month": 4,
-"exp\_year": 2033,
-"spend\_limit": 20,
-"single\_use": true,
-"status": "ACTIVE",
-"spend\_request\_id": "spr\_1c9d..."
+  "id": "card_8f2a...",
+  "brand": "visa",
+  "last4": "8339",
+  "exp_month": 4,
+  "exp_year": 2033,
+  "spend_limit": 20,
+  "single_use": true,
+  "status": "ACTIVE",
+  "spend_request_id": "spr_1c9d...",
+  "request_id": "req_a1b2c3"
 }
 ```
 
-Returns 402 `insufficient_funds` if the cap exceeds your available wallet balance.
+**Errors**
+
+| Status | Code | When |
+| --- | --- | --- |
+| 400 | `invalid_amount` | `amount` is missing, not a number, or not above zero. |
+| 402 | `insufficient_funds` | The cap exceeds the wallet's `available`. Fund the wallet, then retry. |
+| 502 | `card_issue_failed` | The issuer refused or failed. The message says why. |
+
+```bash
+curl -X POST https://api.joomjoo.com/v1/cards \
+  -H "Authorization: Bearer $AGENTPAY_API_KEY" \
+  -H "Content-Type: application/json" \
+  -d '{"amount":20,"merchant":"namecheap","single_use":true}'
+```
 
 ### Reveal a card
 
-GET/v1/cards/{id}
+`GET /v1/cards/{id}`
 
-Return the full card number, CVC, and expiry. Reveal only at the moment of use; AgentPay never logs the PAN.
+Return the full card number, the security code and the expiry. Reveal only at the moment of use; AgentPay never logs the number.
 
-200 Response
+**Path parameters**
 
-```
+| Field | Type | Description |
+| --- | --- | --- |
+| `id` | string, required | The card id from `POST /v1/cards`. |
+
+**Response** 200
+
+| Field | Type | Description |
+| --- | --- | --- |
+| `id` | string | The card id. |
+| `last4` | string | The last four digits. |
+| `number` | string | The full card number. |
+| `number_formatted` | string | The number in groups of four. |
+| `cvc` | string | The security code. |
+| `exp` | string | The expiry as `MM/YY`. |
+| `request_id` | string | The request id, also in the `X-Mooj-Request-Id` header. |
+
+```json
 {
-"id": "card\_8f2a...",
-"last4": "8339",
-"number": "4775xxxxxxxx8339",
-"number\_formatted": "4775 xxxx xxxx 8339",
-"cvc": "123",
-"exp": "04/33"
+  "id": "card_8f2a...",
+  "last4": "8339",
+  "number": "4775xxxxxxxx8339",
+  "number_formatted": "4775 xxxx xxxx 8339",
+  "cvc": "123",
+  "exp": "04/33",
+  "request_id": "req_a1b2c3"
 }
+```
+
+**Errors**
+
+| Status | Code | When |
+| --- | --- | --- |
+| 404 | `card_not_found` | No such card on your account. |
+| 502 | `reveal_failed` | The issuer could not return the card. Retry. |
+
+```bash
+curl https://api.joomjoo.com/v1/cards/card_8f2a... \
+  -H "Authorization: Bearer $AGENTPAY_API_KEY"
 ```
 
 ### Close a card
 
-POST/v1/cards/{id}/close
+`POST /v1/cards/{id}/close`
 
-Close a card and release any unused reserve back to your wallet.
+Close an issued card and release any unused reserve back to the wallet.
 
-200 Response
+**Path parameters**
 
-```
+| Field | Type | Description |
+| --- | --- | --- |
+| `id` | string, required | The card id. |
+
+**Response** 200
+
+| Field | Type | Description |
+| --- | --- | --- |
+| `id` | string | The card id. |
+| `status` | string | `closed`. |
+| `released_display` | string | The reserve returned to the wallet, as a display string such as `$20.00`. |
+| `available_to_issue_display` | string | The wallet's available after the release. |
+| `request_id` | string | The request id, also in the `X-Mooj-Request-Id` header. |
+
+```json
 {
-"id": "card\_8f2a...",
-"status": "closed",
-"released\_display": "$20.00",
-"available\_to\_issue\_display": "$140.00"
+  "id": "card_8f2a...",
+  "status": "closed",
+  "released_display": "$20.00",
+  "available_to_issue_display": "$140.00",
+  "request_id": "req_a1b2c3"
 }
+```
+
+**Errors**
+
+| Status | Code | When |
+| --- | --- | --- |
+| 404 | `card_not_found` | No such card on your account. |
+| 502 | `close_failed` | The issuer could not close the card. Retry. |
+
+```bash
+curl -X POST https://api.joomjoo.com/v1/cards/card_8f2a.../close \
+  -H "Authorization: Bearer $AGENTPAY_API_KEY"
+```
+
+### List cards
+
+`GET /v1/cards`
+
+Every card on the account: the person's connected cards first (source own), then issued cards (source issued).
+
+**Response** 200
+
+| Field | Type | Description |
+| --- | --- | --- |
+| `cards` | array | Connected cards first, then issued cards. |
+|   `id` | string | The card id. |
+|   `source` | string | `own` for a connected card, `issued` for an AgentPay card. One of `own`, `issued`. |
+|   `brand` | string | `visa` or `mastercard`. |
+|   `last4` | string |  |
+|   `exp` | string | The expiry as `MM/YY`. |
+|   `label` | string | The card's label: the cardholder's on a connected card, `card_name` on an issued one. |
+|   `holder_name` | string | Connected cards only. The name on the card. |
+|   `status` | string | `active` on a connected card; the issuer status on an issued one. |
+|   `single_use` | boolean | Issued cards only. |
+|   `spend_limit` | number | Issued cards only. The cap in dollars. |
+|   `spent` | number | Issued cards only. Dollars charged so far. |
+| `request_id` | string | The request id, also in the `X-Mooj-Request-Id` header. |
+
+```json
+{
+  "cards": [
+    {
+      "id": "9b2e...",
+      "source": "own",
+      "brand": "visa",
+      "last4": "4242",
+      "exp": "12/30",
+      "label": "Visa ending 4242",
+      "holder_name": "A. Example",
+      "status": "active"
+    },
+    {
+      "id": "card_8f2a...",
+      "source": "issued",
+      "brand": "visa",
+      "last4": "8339",
+      "exp": "04/33",
+      "label": "API - namecheap",
+      "status": "ACTIVE",
+      "single_use": true,
+      "spend_limit": 20,
+      "spent": 0
+    }
+  ],
+  "request_id": "req_a1b2c3"
+}
+```
+
+```bash
+curl https://api.joomjoo.com/v1/cards \
+  -H "Authorization: Bearer $AGENTPAY_API_KEY"
 ```
 
 ### Connect the person's own card
 
-POST/v1/cards/connect
+`POST /v1/cards/connect`
 
-Returns a one-hour, single-use link. Send it to the cardholder: they open it in Safari or Chrome on the phone they will approve purchases with, type their own credit or debit card once, and lock it with a passkey. The card is encrypted on their device before it leaves the page; AgentPay never holds the number in clear and never stores the security code. Nothing is issued and nothing is prepaid: they keep their points.
+A one-hour, single-use link where the cardholder connects their own credit or debit card behind a passkey. Send it to them; never open it yourself.
 
-200 Response
+The card is encrypted on the cardholder's device before it leaves the page. AgentPay never holds the number in clear and never stores the security code. Nothing is issued and nothing is prepaid: they keep their points.
 
-```
+**Response** 200
+
+| Field | Type | Description |
+| --- | --- | --- |
+| `connect_id` | string | The enrolment id. |
+| `connect_url` | string | The link for the cardholder. Safari or Chrome, on the phone they will approve purchases with. |
+| `expires_at` | string | ISO 8601. One hour after creation. |
+| `status` | string | `open`. |
+| `instructions` | string | What to tell the cardholder, in plain words. |
+| `request_id` | string | The request id, also in the `X-Mooj-Request-Id` header. |
+
+```json
 {
-"connect\_id": "6f1c...",
-"connect\_url": "https://claim.joomjoo.com/add/6f1c...#...",
-"expires\_at": "2026-10-20T23:00:00.000Z",
-"status": "open"
+  "connect_id": "6f1c...",
+  "connect_url": "https://claim.joomjoo.com/add/6f1c...#...",
+  "expires_at": "2026-11-03T15:00:00.000Z",
+  "status": "open",
+  "instructions": "Send the link to the cardholder. They open it in Safari or Chrome on the phone they will approve purchases with, type the card once, and lock it with a passkey. The security code is never stored. Then GET /v1/cards shows it with source \"own\".",
+  "request_id": "req_a1b2c3"
 }
 ```
 
-A connected card pays only after the cardholder approves each purchase on that phone: the checkout stops at the review, `GET /v1/checkout/{id}` answers `needs_card_approval` with an `approval_url`, and the `checkout.needs_card_approval` event carries the same link. The bank's own check (3-D Secure) on a connected card is not cleared by AgentPay; the cardholder completes it on the agent's screen.
+**Errors**
 
-### List cards
+| Status | Code | When |
+| --- | --- | --- |
+| 503 | `own_card_unavailable` | Connecting a card is not switched on for the account. |
+| 502 | `connect_failed` | The link could not be created. Retry. |
 
-GET/v1/cards
-
-Every card on the account: connected cards first (`source: "own"`), then issued cards (`source: "issued"`).
-
-200 Response
-
-```
-{
-"cards": [
-{ "id": "9b2e...", "source": "own", "brand": "visa", "last4": "4242", "exp": "12/30", "label": "Visa ending 4242", "status": "active" },
-{ "id": "card\_8f2a...", "source": "issued", "brand": "visa", "last4": "8339", "exp": "04/33", "status": "active", "single\_use": true, "spend\_limit": 20 }
-]
-}
+```bash
+curl -X POST https://api.joomjoo.com/v1/cards/connect \
+  -H "Authorization: Bearer $AGENTPAY_API_KEY"
 ```
 
 ### Remove a connected card
 
-DELETE/v1/cards/{id}
+`DELETE /v1/cards/{id}`
 
-Removes a connected card (`source: "own"`) and withdraws any purchase waiting on it. An issued card is closed with `POST /v1/cards/{id}/close` instead.
+Remove a connected card (source own) and withdraw any purchase waiting on it. An issued card is closed with POST /v1/cards/{id}/close instead.
 
-## Spend 
+**Path parameters**
+
+| Field | Type | Description |
+| --- | --- | --- |
+| `id` | string, required | The connected card's id from `GET /v1/cards`. |
+
+**Response** 200
+
+| Field | Type | Description |
+| --- | --- | --- |
+| `id` | string | The card id. |
+| `source` | string | `own`. |
+| `status` | string | `removed`. |
+| `request_id` | string | The request id, also in the `X-Mooj-Request-Id` header. |
+
+```json
+{
+  "id": "9b2e...",
+  "source": "own",
+  "status": "removed",
+  "request_id": "req_a1b2c3"
+}
+```
+
+**Errors**
+
+| Status | Code | When |
+| --- | --- | --- |
+| 404 | `card_not_found` | No connected card with that id. An issued card is closed with `POST /v1/cards/{id}/close`. |
+| 502 | `remove_failed` | The card could not be removed. Retry. |
+
+```bash
+curl -X DELETE https://api.joomjoo.com/v1/cards/9b2e... \
+  -H "Authorization: Bearer $AGENTPAY_API_KEY"
+```
+
+## Spend
 
 ### Get spend status
 
-GET/v1/spend/{spend\_request\_id}
+`GET /v1/spend/{spend_request_id}`
 
-Check whether a card issued with [`POST /v1/cards`](#create-card) was charged. Pass the `spend_request_id` from the create response.
+Whether a card issued with POST /v1/cards was charged, and whether the charge settled.
 
-not\_started
-authorized
-cleared
-declined
+**Path parameters**
 
-200 Response
+| Field | Type | Description |
+| --- | --- | --- |
+| `spend_request_id` | string, required | From the create-card response. |
 
-```
+**Response** 200
+
+| Field | Type | Description |
+| --- | --- | --- |
+| `spend_request_id` | string |  |
+| `decision` | string | The policy decision at issue time, `APPROVED` for a card that was minted. |
+| `merchant` | string | The merchant the card was issued for. |
+| `requested_usd` | number | The cap that was requested. |
+| `status` | string | The charge state. One of `not_started`, `authorized`, `cleared`, `declined`. |
+| `settled` | boolean | `true` once the network cleared the charge, usually by the next day. |
+| `amount` | number | The charged amount in dollars, `null` before a charge. |
+| `decline_reason` | string | On `declined`, why. |
+| `request_id` | string | The request id, also in the `X-Mooj-Request-Id` header. |
+
+```json
 {
-"spend\_request\_id": "spr\_1c9d...",
-"merchant": "namecheap",
-"decision": "APPROVED",
-"status": "cleared",
-"settled": true,
-"amount": 1.98
+  "spend_request_id": "spr_1c9d...",
+  "decision": "APPROVED",
+  "merchant": "namecheap",
+  "requested_usd": 20,
+  "status": "cleared",
+  "settled": true,
+  "amount": 1.98,
+  "decline_reason": null,
+  "request_id": "req_a1b2c3"
 }
 ```
 
-## Checkout 
+**Errors**
+
+| Status | Code | When |
+| --- | --- | --- |
+| 404 | `spend_not_found` | No such spend on your account. |
+| 502 | `spend_status_failed` | The status could not be read. Retry. |
+
+```bash
+curl https://api.joomjoo.com/v1/spend/spr_1c9d... \
+  -H "Authorization: Bearer $AGENTPAY_API_KEY"
+```
+
+## Checkout
 
 ### Start a checkout
 
-POST/v1/checkout
+`POST /v1/checkout`
 
-Asynchronous. AgentPay mints a card, drives the merchant checkout, handles 3DS, and (if authorized) pays. Returns a `checkout_id` to poll.
+Asynchronous. AgentPay opens the merchant in its own browser, reaches the review, mints the card for the real total, pays, and clears 3DS. Returns a checkout_id to poll.
 
-| Field | Type | Req | Description |
-| --- | --- | --- | --- |
-| task | string | yes | Plain-English description of what to buy. |
-| merchant | string | yes | Merchant to buy from. |
-| amount | number | yes | Maximum USD to spend (becomes the card cap). |
-| confirm\_pay | boolean | no | Default false: the run stops at the final review and waits for the account owner's yes. true: pay without a human yes, up to the cap. The agent's own approval mode can only make this stricter; the response's `confirm_pay` says what was granted. |
-| idempotency\_key | string | no | Your own key for this checkout. A retry with the same key returns the same checkout instead of starting a second run. |
-| connection\_id | string | no | Run signed-in on a [connection](#connections). Auto-matched by merchant if omitted. |
-| own\_card\_id | string | no | Pay with a [connected card](#connect-card) instead of an issued one. The checkout stops at the review until the cardholder approves on their phone; `confirm_pay` cannot skip that approval. |
-| card\_holder\_name | string | no | Name on the card for the run (issued cards only). |
-| start\_url | string | no | URL or bare domain to open first. |
+**Body** (application/json)
 
-200 Response
+| Field | Type | Description |
+| --- | --- | --- |
+| `task` | string, required | What to buy, in plain English. |
+| `merchant` | string, required | The merchant to buy from, e.g. `namecheap` or `amazon`. |
+| `amount` | number, required | The most to spend, in dollars. Becomes the card cap. |
+| `confirm_pay` | boolean, default `false` | `false`: the run stops at the final review and waits for the account owner's yes in the console. `true`: pay without a human yes, up to the cap. The agent's own approval mode can only make this stricter; the response's `confirm_pay` says what was granted. |
+| `idempotency_key` | string | Your own key for this checkout, up to 120 characters. A retry with the same key returns the same checkout instead of starting a second run. Always send one. |
+| `connection_id` | string | Run signed in on a connection. When omitted, the newest connected connection for the merchant is used. |
+| `own_card_id` | string | Pay with the person's connected card (`GET /v1/cards`, `source: "own"`) instead of an issued one. The run stops at the review until the cardholder approves on their phone; `confirm_pay` cannot skip that. |
+| `resume_of` | string | The id of an ended checkout of yours that left its own items in the basket. The new run continues from that basket. |
+| `card_holder_name` | string | The name to type on the card for this run. Issued cards only. |
+| `start_url` | string | The page to open first: a full https address or a bare domain. Needed when the account has no stored login for the merchant. |
 
-```
+**Response** 200
+
+| Field | Type | Description |
+| --- | --- | --- |
+| `checkout_id` | string | The run id. Poll it. |
+| `status` | string | `queued` on creation. |
+| `confirm_pay` | boolean | What was granted. `true` only if you asked for it and the agent's mode allows it. |
+| `host` | string | The site the run will open, once known. |
+| `poll` | string | The path to poll, `/v1/checkout/{checkout_id}`. |
+| `request_id` | string | The request id, also in the `X-Mooj-Request-Id` header. |
+
+```json
 {
-"checkout\_id": "run\_7a1e...",
-"status": "queued",
-"poll": "/v1/checkout/run\_7a1e..."
+  "checkout_id": "run_7a1e...",
+  "status": "queued",
+  "confirm_pay": false,
+  "host": "www.namecheap.com",
+  "poll": "/v1/checkout/run_7a1e...",
+  "request_id": "req_a1b2c3"
 }
+```
+
+**Errors**
+
+| Status | Code | When |
+| --- | --- | --- |
+| 400 | `invalid_request` | `task`, `merchant` or `amount` is missing, or `own_card_id` is not a card id. |
+| 400 | `connection_not_found` | `connection_id` names no connected connection on the account. |
+| 400 | `site_required` | No stored login for the merchant. Pass `start_url`, or connect the merchant once in the console. |
+| 400 | `site_ambiguous` | Several stored logins for the merchant. `hosts` lists them; pass `start_url`. |
+| 400 | `agent_required` | The account has several agents and none was named. |
+| 402 | `plan_limit` | The plan's cards a month, or per-card cap, is reached. |
+| 404 | `card_not_found` | No connected card with that `own_card_id`. |
+| 404 | `checkout_not_found` | `resume_of` names no checkout of yours. |
+| 409 | `not_resumable` | The `resume_of` run left nothing in the basket. |
+| 409 | `agent_paused` | The agent is paused in the console. |
+| 409 | `busy` | The merchant session is running another checkout. Retry shortly. |
+| 503 | `own_card_unavailable` | Paying with an own card is not switched on for the account. |
+| 502 | `checkout_start_failed` | The engine could not be started. Retry with the same `idempotency_key`. |
+
+```bash
+curl -X POST https://api.joomjoo.com/v1/checkout \
+  -H "Authorization: Bearer $AGENTPAY_API_KEY" \
+  -H "Content-Type: application/json" \
+  -d '{"task":"buy the domain example.click for 1 year","merchant":"namecheap","amount":20,"confirm_pay":false,"idempotency_key":"order-001"}'
 ```
 
 ### Get checkout status
 
-GET/v1/checkout/{checkout\_id}
+`GET /v1/checkout/{checkout_id}`
 
-200 Response
+The current state of a run. Poll every five to ten seconds until status is submitted, canceled, blocked or error.
 
-```
+**Path parameters**
+
+| Field | Type | Description |
+| --- | --- | --- |
+| `checkout_id` | string, required | From the start-checkout response. |
+
+**Response** 200
+
+| Field | Type | Description |
+| --- | --- | --- |
+| `checkout_id` | string |  |
+| `status` | string | The run state. One of `queued`, `running`, `needs_login`, `needs_answer`, `awaiting_approval`, `needs_card_approval`, `paying`, `submitted`, `canceled`, `blocked`, `error`. |
+| `task` | string |  |
+| `merchant` | string |  |
+| `amount` | number | The cap in dollars. |
+| `card_last4` | string | The card the run pays with, once minted or chosen. |
+| `card_source` | string | `issued` or `own`. |
+| `host` | string | The site the run opened. |
+| `review_total` | string | The shop's total at the review, as a display string such as `"1.98 USD"` or `"60.90 AED"`. |
+| `order_id` | string | The merchant's order id, on `submitted`. |
+| `order_total` | string | The paid total as a display string, on `submitted`. |
+| `needs_login` | boolean | `true` while the status is `needs_login`. |
+| `login_check` | string | On `needs_login`: why. One of `signed_out`, `unknown`, `passkey_password`. |
+| `login_url` | string | On `needs_login`: the page the browser stopped on. |
+| `connect_url` | string | On `needs_login`: the live window where the person signs in. |
+| `login_layer` | string | How the run signed in. One of `session`, `passkey`. |
+| `needs_card_approval` | boolean | `true` while the run waits for the cardholder. |
+| `approval_url` | string | On `needs_card_approval`: the link for the cardholder's phone. |
+| `approval_expires_at` | string | On `needs_card_approval`: when the link stops working. |
+| `payment_unknown` | boolean | `true` when the run paid but could not read the merchant's confirmation. Check the merchant account before retrying. |
+| `error_reason` | string | On `blocked` or `error`: why. |
+| `request_id` | string | The request id, also in the `X-Mooj-Request-Id` header. |
+
+```json
 {
-"checkout\_id": "run\_7a1e...",
-"status": "awaiting\_approval",
-"task": "buy the domain example.click for 1 year",
-"merchant": "namecheap",
-"amount": 20,
-"card\_last4": "4775",
-"card\_source": "issued",
-"needs\_card\_approval": false,
-"approval\_url": null,
-"approval\_expires\_at": null,
-"payment\_unknown": false,
-"host": "www.namecheap.com",
-"review\_total": "1.98 USD",
-"order\_id": null,
-"order\_total": null,
-"needs\_login": false,
-"login\_check": null,
-"login\_url": null,
-"connect\_url": null,
-"login\_layer": "session",
-"error\_reason": null
+  "checkout_id": "run_7a1e...",
+  "status": "awaiting_approval",
+  "task": "buy the domain example.click for 1 year",
+  "merchant": "namecheap",
+  "amount": 20,
+  "card_last4": "4775",
+  "card_source": "issued",
+  "host": "www.namecheap.com",
+  "review_total": "1.98 USD",
+  "order_id": null,
+  "order_total": null,
+  "needs_login": false,
+  "login_check": null,
+  "login_url": null,
+  "connect_url": null,
+  "login_layer": "session",
+  "needs_card_approval": false,
+  "approval_url": null,
+  "approval_expires_at": null,
+  "payment_unknown": false,
+  "error_reason": null,
+  "request_id": "req_a1b2c3"
 }
 ```
 
-## Connections 
+**Errors**
+
+| Status | Code | When |
+| --- | --- | --- |
+| 404 | `checkout_not_found` | No such checkout on your account. |
+
+```bash
+curl https://api.joomjoo.com/v1/checkout/run_7a1e... \
+  -H "Authorization: Bearer $AGENTPAY_API_KEY"
+```
+
+## Connections
 
 ### Create a connection
 
-POST/v1/connections
+`POST /v1/connections`
 
-| Field | Type | Req | Description |
-| --- | --- | --- | --- |
-| merchant | string | yes | Merchant to connect a login for. |
-| user\_ref | string | no | Your own reference for the end user this login belongs to. |
+Start a reusable login at a merchant. Returns a connect_url, a live window on the merchant's own sign-in page, for the person to complete.
 
-200 Response
+**Body** (application/json)
 
-```
+| Field | Type | Description |
+| --- | --- | --- |
+| `merchant` | string, required | The merchant to connect a login for. |
+| `user_ref` | string | Your own reference for the end user this login belongs to. |
+
+**Response** 200
+
+| Field | Type | Description |
+| --- | --- | --- |
+| `connection_id` | string |  |
+| `merchant` | string |  |
+| `connect_url` | string | Open it for the person. AgentPay never sees the password. |
+| `status` | string | `pending` until you call complete. |
+| `request_id` | string | The request id, also in the `X-Mooj-Request-Id` header. |
+
+```json
 {
-"connection\_id": "conn\_5d2b...",
-"connect\_url": "https://connect.browserbase.com/...",
-"status": "pending"
+  "connection_id": "conn_5d2b...",
+  "merchant": "amazon",
+  "connect_url": "https://connect.browserbase.com/...",
+  "status": "pending",
+  "request_id": "req_a1b2c3"
 }
+```
+
+**Errors**
+
+| Status | Code | When |
+| --- | --- | --- |
+| 400 | `invalid_request` | `merchant` is missing. |
+| 502 | `connect_start_failed` | The live window could not be opened. Retry. |
+
+```bash
+curl -X POST https://api.joomjoo.com/v1/connections \
+  -H "Authorization: Bearer $AGENTPAY_API_KEY" \
+  -H "Content-Type: application/json" \
+  -d '{"merchant":"amazon","user_ref":"user_42"}'
 ```
 
 ### Complete a connection
 
-POST/v1/connections/{id}/complete
+`POST /v1/connections/{id}/complete`
 
-Call after the user has signed in at the `connect_url`. Persists the login; status becomes `connected`.
+Call after the person signed in at the connect_url. The login is saved and the connection becomes connected.
 
-### List / get connections
+**Path parameters**
 
-GET/v1/connections
+| Field | Type | Description |
+| --- | --- | --- |
+| `id` | string, required | The connection id. |
 
-GET/v1/connections/{id}
+**Response** 200
 
-List all connections, or poll a single connection's status (`pending` / `connected` / `removed`). Each connection also says which login layer it runs on.
+| Field | Type | Description |
+| --- | --- | --- |
+| `connection_id` | string |  |
+| `status` | string | `connected`. |
+| `request_id` | string | The request id, also in the `X-Mooj-Request-Id` header. |
 
-200 Response
-
-```
+```json
 {
-"connection\_id": "conn\_5d2b...",
-"merchant": "amazon",
-"status": "connected",
-"layer": "passkey",
-"passkey\_status": "connected",
-"remote\_removal": "available",
-"passkey\_connected\_at": "2026-10-24T22:10:00.000Z"
+  "connection_id": "conn_5d2b...",
+  "status": "connected",
+  "request_id": "req_a1b2c3"
 }
 ```
 
-### The AgentPay passkey
+**Errors**
 
-On merchants that take passkeys (Amazon first), AgentPay adds its own passkey to the person's account the next time a checkout runs on a connection, and from then on every checkout signs in by itself, even after the merchant expires the session. Nothing changes in your calls. `layer` is `passkey` once that happened, `session` before (the plain signed-in session). `passkey_status` walks through `none`, `enrolling`, `awaiting_password`, `pending`, `connected` or `connected_unmanaged` (the merchant shows no identifier AgentPay can use to delete the entry remotely), `failed`, `needs_person`, `login_failed`, and on disconnect `removing`, `removed` or `removed_locally`. A checkout's `login_layer` says which layer signed in.
+| Status | Code | When |
+| --- | --- | --- |
+| 404 | `connection_not_found` | No such connection on your account. |
 
-Some merchants ask for the account password once before a passkey can be added. The checkout then stops with `needs_login` and `login_check: "passkey_password"`: the person is signed in; they type the password at `connect_url` (AgentPay never stores it) and you start the checkout again on the same connection, or you skip it below and the connection stays on the session layer.
+```bash
+curl -X POST https://api.joomjoo.com/v1/connections/conn_5d2b.../complete \
+  -H "Authorization: Bearer $AGENTPAY_API_KEY"
+```
+
+### List connections
+
+`GET /v1/connections`
+
+Every connection on the account, newest first, each with its passkey layer.
+
+**Response** 200
+
+| Field | Type | Description |
+| --- | --- | --- |
+| `connections` | array |  |
+|   `connection_id` | string |  |
+|   `merchant` | string |  |
+|   `user_ref` | string | Your reference, when given. |
+|   `status` | string |  One of `pending`, `connected`, `removed`. |
+|   `layer` | string | `passkey` once the AgentPay passkey is enrolled, `session` before. One of `session`, `passkey`. |
+|   `passkey_status` | string |  One of `none`, `enrolling`, `awaiting_password`, `pending`, `connected`, `connected_unmanaged`, `failed`, `needs_person`, `login_failed`, `removing`, `removed`, `removed_locally`. |
+|   `remote_removal` | string | `available` when AgentPay can delete its entry at the merchant by itself. One of `available`, `unavailable`. |
+|   `passkey_connected_at` | string | ISO 8601, when the passkey was enrolled. |
+| `request_id` | string | The request id, also in the `X-Mooj-Request-Id` header. |
+
+```json
+{
+  "connections": [
+    {
+      "connection_id": "conn_5d2b...",
+      "merchant": "amazon",
+      "user_ref": "user_42",
+      "status": "connected",
+      "layer": "passkey",
+      "passkey_status": "connected",
+      "remote_removal": "available",
+      "passkey_connected_at": "2026-10-24T22:10:00.000Z"
+    }
+  ],
+  "request_id": "req_a1b2c3"
+}
+```
+
+```bash
+curl https://api.joomjoo.com/v1/connections \
+  -H "Authorization: Bearer $AGENTPAY_API_KEY"
+```
+
+### Get a connection
+
+`GET /v1/connections/{id}`
+
+One connection with its status and passkey layer. Poll it after a disconnect to watch the passkey being removed.
+
+**Path parameters**
+
+| Field | Type | Description |
+| --- | --- | --- |
+| `id` | string, required | The connection id. |
+
+**Response** 200
+
+| Field | Type | Description |
+| --- | --- | --- |
+| `connection_id` | string |  |
+| `merchant` | string |  |
+| `status` | string |  One of `pending`, `connected`, `removed`. |
+| `layer` | string |  One of `session`, `passkey`. |
+| `passkey_status` | string |  One of `none`, `enrolling`, `awaiting_password`, `pending`, `connected`, `connected_unmanaged`, `failed`, `needs_person`, `login_failed`, `removing`, `removed`, `removed_locally`. |
+| `remote_removal` | string |  One of `available`, `unavailable`. |
+| `passkey_connected_at` | string |  |
+| `request_id` | string | The request id, also in the `X-Mooj-Request-Id` header. |
+
+```json
+{
+  "connection_id": "conn_5d2b...",
+  "merchant": "amazon",
+  "status": "connected",
+  "layer": "passkey",
+  "passkey_status": "connected",
+  "remote_removal": "available",
+  "passkey_connected_at": "2026-10-24T22:10:00.000Z",
+  "request_id": "req_a1b2c3"
+}
+```
+
+**Errors**
+
+| Status | Code | When |
+| --- | --- | --- |
+| 404 | `connection_not_found` | No such connection on your account. |
+
+```bash
+curl https://api.joomjoo.com/v1/connections/conn_5d2b... \
+  -H "Authorization: Bearer $AGENTPAY_API_KEY"
+```
 
 ### Skip the passkey password
 
-POST/v1/connections/{id}/passkey
+`POST /v1/connections/{id}/passkey`
 
-| Field | Type | Req | Description |
-| --- | --- | --- | --- |
-| action | string | yes | Only `skip`. The connection keeps signing in with the saved session; the password is never asked again for it. |
+The person will not type the merchant password for the AgentPay passkey. The connection keeps signing in with the saved session and the wall is never shown again for it.
 
-200 Response
+**Path parameters**
 
-```
+| Field | Type | Description |
+| --- | --- | --- |
+| `id` | string, required | The connection id. |
+
+**Body** (application/json)
+
+| Field | Type | Description |
+| --- | --- | --- |
+| `action` | string, required | Only `skip`. One of `skip`. |
+
+**Response** 200
+
+| Field | Type | Description |
+| --- | --- | --- |
+| `connection_id` | string |  |
+| `passkey_status` | string | `needs_person` after a skip. Unchanged when the passkey was already past the password step. |
+| `changed` | boolean | Whether the call changed anything. |
+| `request_id` | string | The request id, also in the `X-Mooj-Request-Id` header. |
+
+```json
 {
-"connection\_id": "conn\_5d2b...",
-"passkey\_status": "needs\_person",
-"changed": true
+  "connection_id": "conn_5d2b...",
+  "passkey_status": "needs_person",
+  "changed": true,
+  "request_id": "req_a1b2c3"
 }
+```
+
+**Errors**
+
+| Status | Code | When |
+| --- | --- | --- |
+| 400 | `invalid_request` | `action` is not `skip`. |
+| 404 | `connection_not_found` | No such connection on your account. |
+
+```bash
+curl -X POST https://api.joomjoo.com/v1/connections/conn_5d2b.../passkey \
+  -H "Authorization: Bearer $AGENTPAY_API_KEY" \
+  -H "Content-Type: application/json" \
+  -d '{"action":"skip"}'
 ```
 
 ### Disconnect
 
-DELETE/v1/connections/{id}
+`DELETE /v1/connections/{id}`
 
-Ends the connection. The AgentPay key is destroyed first, so nothing can sign in with it from that moment; the saved session is deleted; the entry at the merchant is removed when AgentPay can. Poll the connection: `passkey_status` ends `removed`, or `removed_locally` when the person has to remove the entry named `AgentPay-...` in the merchant's security settings themselves. Idempotent.
+End a connection. The AgentPay key is destroyed first, the saved session is deleted, and the entry at the merchant is removed when AgentPay can. Idempotent.
 
-200 Response
+**Path parameters**
 
-```
+| Field | Type | Description |
+| --- | --- | --- |
+| `id` | string, required | The connection id. |
+
+**Response** 200
+
+| Field | Type | Description |
+| --- | --- | --- |
+| `connection_id` | string |  |
+| `status` | string | `removing` while the passkey is being removed at the merchant, `removed` otherwise. |
+| `passkey_status` | string | `removing`, then on a later read `removed` or `removed_locally` (the person removes the `AgentPay-...` entry in the merchant's security settings themselves). |
+| `request_id` | string | The request id, also in the `X-Mooj-Request-Id` header. |
+
+```json
 {
-"connection\_id": "conn\_5d2b...",
-"status": "removing",
-"passkey\_status": "removing"
+  "connection_id": "conn_5d2b...",
+  "status": "removing",
+  "passkey_status": "removing",
+  "request_id": "req_a1b2c3"
 }
 ```
 
-## Wallet 
+**Errors**
 
-The wallet every card and checkout draws on. A top-up always ends on Stripe's own page, so a card number never passes through the API or through you.
+| Status | Code | When |
+| --- | --- | --- |
+| 404 | `connection_not_found` | No such connection on your account. |
+| 502 | `disconnect_failed` | The passkey could not be revoked. Retry. |
+
+```bash
+curl -X DELETE https://api.joomjoo.com/v1/connections/conn_5d2b... \
+  -H "Authorization: Bearer $AGENTPAY_API_KEY"
+```
+
+## Wallet
 
 ### Read the wallet
 
-GET/v1/wallet
+`GET /v1/wallet`
 
-200 Response
+The balance every card and checkout draws on, what is free to assign, what sits on open cards, and the cards that already hold money.
 
-```
+**Response** 200
+
+| Field | Type | Description |
+| --- | --- | --- |
+| `currency` | string | `USD`. |
+| `onboarded` | boolean | Whether the account finished onboarding. |
+| `balance` | number | Everything in the wallet, in dollars. |
+| `available` | number | `balance` minus `reserved`. What a new card can be capped at. |
+| `reserved` | number | Money sitting on open cards. |
+| `pending` | number | Declared bank money that has not landed. Not spendable. |
+| `balance_display` | string | The same four figures as display strings, e.g. `$32.96`. Also `available_display`, `reserved_display`, `pending_display`. |
+| `cards_ready` | array | Open single-use cards that were never charged. A checkout whose total fits one pays with it, with no new card. |
+|   `last4` | string |  |
+|   `network` | string |  |
+|   `holds` | number | The card's limit in dollars. |
+| `ready_to_spend` | number | `available` plus what `cards_ready` hold. The honest answer to "can the agent buy this". |
+| `charges_in_flight` | array | Charges authorized and still settling. The card holding each stays reserved until the network clears it. |
+|   `amount` | number |  |
+|   `card_last4` | string |  |
+|   `network` | string |  |
+|   `merchant` | string |  |
+|   `status` | string | `authorized, settling`. |
+| `after_settlement` | number | What `balance` becomes once the charges in flight clear. |
+| `note` | string | A plain-words summary of the above, written for an agent. |
+| `request_id` | string | The request id, also in the `X-Mooj-Request-Id` header. |
+
+```json
 {
-"currency": "USD",
-"balance": 32.96,
-"available": 22.96,
-"reserved": 10,
-"pending": 0,
-"balance\_display": "$32.96",
-"available\_display": "$22.96"
+  "currency": "USD",
+  "onboarded": true,
+  "balance": 32.96,
+  "available": 22.96,
+  "reserved": 10,
+  "pending": 0,
+  "balance_display": "$32.96",
+  "available_display": "$22.96",
+  "reserved_display": "$10.00",
+  "pending_display": "$0.00",
+  "cards_ready": [
+    {
+      "last4": "8339",
+      "network": "visa",
+      "holds": 10
+    }
+  ],
+  "ready_to_spend": 32.96,
+  "charges_in_flight": [],
+  "after_settlement": 32.96,
+  "note": "A checkout whose total fits one of the 1 card(s) in cards_ready pays with it, no new card and no top-up needed. Call complete_purchase.",
+  "request_id": "req_a1b2c3"
 }
 ```
 
-`available` is what a new card can be capped at. `reserved` sits on open cards. `pending` is declared bank money that has not landed yet and cannot be spent.
+**Errors**
+
+| Status | Code | When |
+| --- | --- | --- |
+| 502 | `wallet_read_failed` | The wallet could not be read. Retry. |
+
+```bash
+curl https://api.joomjoo.com/v1/wallet \
+  -H "Authorization: Bearer $AGENTPAY_API_KEY"
+```
 
 ### Top up by card or stablecoin
 
-POST/v1/wallet/funding-sessions
+`POST /v1/wallet/funding-sessions`
 
-| Field | Type | Req | Description |
-| --- | --- | --- | --- |
-| amount | number | yes | Dollars to add. |
-| success\_url | string | no | Where the person lands after paying, https. Defaults to the AgentPay console. |
-| cancel\_url | string | no | Where the person lands if they cancel, https. |
+Open a Stripe Checkout page for the amount. Give url to the person; the wallet is credited the moment Stripe confirms. A card number never passes through the API.
 
-200 Response
+**Body** (application/json)
 
-```
+| Field | Type | Description |
+| --- | --- | --- |
+| `amount` | number, required | Dollars to add, above zero. |
+| `success_url` | string | Where the person lands after paying. Must be https. Defaults to the AgentPay console. |
+| `cancel_url` | string | Where the person lands if they cancel. Must be https. Defaults to the AgentPay console. |
+
+**Response** 200
+
+| Field | Type | Description |
+| --- | --- | --- |
+| `funding_session_id` | string | The Stripe Checkout session id. |
+| `url` | string | The page to open for the person. |
+| `amount` | number |  |
+| `amount_display` | string |  |
+| `status` | string | `open`. |
+| `pays_with` | string | `card or stablecoin on the Stripe page`. |
+| `credited` | string | When the wallet is credited, in plain words. |
+| `request_id` | string | The request id, also in the `X-Mooj-Request-Id` header. |
+
+```json
 {
-"funding\_session\_id": "cs\_live\_...",
-"url": "https://checkout.stripe.com/c/pay/...",
-"amount": 50,
-"status": "open"
+  "funding_session_id": "cs_live_...",
+  "url": "https://checkout.stripe.com/c/pay/...",
+  "amount": 50,
+  "amount_display": "$50.00",
+  "status": "open",
+  "pays_with": "card or stablecoin on the Stripe page",
+  "credited": "the wallet is credited the moment Stripe confirms; subscribe to money.funded to know",
+  "request_id": "req_a1b2c3"
 }
 ```
 
-Open `url` for the person. Stripe offers card and stablecoin. The wallet is credited the moment Stripe confirms; subscribe to `money.funded` to know, or poll `GET /v1/wallet`.
+**Errors**
 
-Returns 402 `wallet_limit`, `funding_budget_reached` or `funding_unavailable` when a fence refuses the amount; the message says which.
+| Status | Code | When |
+| --- | --- | --- |
+| 400 | `invalid_amount` | `amount` is missing or not above zero, or the amount was refused as malformed. |
+| 400 | `invalid_request` | `success_url` or `cancel_url` is not an https address. |
+| 402 | `wallet_limit` | The top-up would take the wallet above its ceiling. |
+| 402 | `funding_budget_reached` | The account's funding budget for the period is reached. |
+| 402 | `funding_unavailable` | Top-ups are paused for the moment. |
+| 502 | `funding_session_failed` | The Stripe page could not be opened. Retry. |
+
+```bash
+curl -X POST https://api.joomjoo.com/v1/wallet/funding-sessions \
+  -H "Authorization: Bearer $AGENTPAY_API_KEY" \
+  -H "Content-Type: application/json" \
+  -d '{"amount":50,"success_url":"https://yourapp.example/funded"}'
+```
 
 ### Top up by bank transfer
 
-POST/v1/wallet/bank-transfers
+`POST /v1/wallet/bank-transfers`
 
-| Field | Type | Req | Description |
-| --- | --- | --- | --- |
-| amount | number | yes | Amount in the transfer currency. |
-| rail | string | no | `ach` (default), `wire_domestic`, `wire_international` or `uae_local`. |
-| currency | string | no | `USD`, or `AED` for `uae_local`. Defaults by rail. |
-| sent\_on | string | no | `yyyy-MM-dd`, the day the transfer was sent. |
-| sender\_bank\_name, sender\_account\_name, sender\_reference | string | no | What the bank statement will show, so the transfer is matched faster. |
-| idempotency\_key | string | no | Your own key; a retry returns the same declaration. |
+Declare a transfer and get the account to send it to, with a reference code for the memo. The money is pending until it lands.
 
-200 Response
+**Body** (application/json)
 
-```
+| Field | Type | Description |
+| --- | --- | --- |
+| `amount` | number, required | The amount in the transfer currency, above zero. |
+| `rail` | string, default `ach` | Which account to send to. One of `ach`, `wire_domestic`, `wire_international`, `uae_local`. |
+| `currency` | string | `USD`, or `AED` for `uae_local`. Defaults by rail. |
+| `sent_on` | string | `yyyy-MM-dd`, the day the transfer was sent. |
+| `sender_bank_name` | string | What the statement will show, so the transfer is matched faster. |
+| `sender_account_name` | string |  |
+| `sender_reference` | string |  |
+| `idempotency_key` | string | Your own key, up to 80 characters. A retry returns the same declaration. |
+
+**Response** 200
+
+| Field | Type | Description |
+| --- | --- | --- |
+| `funding_event_id` | string |  |
+| `status` | string | `pending` until the money lands. |
+| `already_recorded` | boolean | `true` when the `idempotency_key` matched an earlier declaration. |
+| `amount` | number |  |
+| `currency` | string |  |
+| `rail` | string |  |
+| `reference_code` | string | Eight characters. Goes in the transfer memo. |
+| `pending_balance` | number | The wallet's pending after this declaration. |
+| `instructions` | object | The account to send to. Show it to the person as it is. Fields depend on the rail: `beneficiary_name`, `account_number`, `routing_number` or `swift_bic`, `iban`, `bank_name`, `bank_address`, `beneficiary_address`, `reference`, `note`. |
+| `request_id` | string | The request id, also in the `X-Mooj-Request-Id` header. |
+
+```json
 {
-"funding\_event\_id": "...",
-"status": "pending",
-"amount": 500,
-"currency": "USD",
-"rail": "wire\_domestic",
-"reference\_code": "7K2QW9PD",
-"pending\_balance": 500,
-"instructions": { "beneficiary\_name": "AgentPay, LLC", "account\_number": "...", "routing\_number": "...", "reference": "7K2QW9PD" }
+  "funding_event_id": "fe_...",
+  "status": "pending",
+  "already_recorded": false,
+  "amount": 500,
+  "currency": "USD",
+  "rail": "wire_domestic",
+  "reference_code": "7K2QW9PD",
+  "pending_balance": 500,
+  "instructions": {
+    "beneficiary_name": "Joomjoo, LLC",
+    "account_number": "...",
+    "routing_number": "...",
+    "bank_name": "Column N.A.",
+    "account_type": "Checking",
+    "bank_address": "...",
+    "beneficiary_address": "...",
+    "reference": "7K2QW9PD",
+    "note": "Put the reference code in the transfer memo. The wallet is credited when the money lands; subscribe to money.funded to know."
+  },
+  "request_id": "req_a1b2c3"
 }
 ```
 
-Show the person `instructions`. The reference code goes in the transfer memo. The money is pending until it lands, then `money.funded` fires and the balance moves.
+**Errors**
 
-## Errors 
+| Status | Code | When |
+| --- | --- | --- |
+| 400 | `invalid_amount` | `amount` is missing or not above zero. |
+| 400 | `invalid_request` | `rail` is not one of the four, or the declaration was refused as malformed. |
+| 402 | `wallet_limit` | The transfer would take the wallet above its ceiling. |
+| 402 | `funding_budget_reached` | The account's funding budget for the period is reached. |
+| 402 | `funding_unavailable` | Top-ups are paused for the moment. |
+| 502 | `bank_transfer_failed` | The declaration could not be recorded. Retry. |
 
-AgentPay uses conventional HTTP status codes. The body carries a machine-readable string and a `request_id`.
+```bash
+curl -X POST https://api.joomjoo.com/v1/wallet/bank-transfers \
+  -H "Authorization: Bearer $AGENTPAY_API_KEY" \
+  -H "Content-Type: application/json" \
+  -d '{"amount":500,"rail":"wire_domestic","sent_on":"2026-11-03","idempotency_key":"topup-2026-11-03"}'
+```
 
-| Status | Meaning |
+## Webhooks
+
+Register an endpoint in the console under Developer, Webhooks. Each delivery is `{ "id", "type", "created", "data" }` with a `Joomjoo-Signature: t=<unix>,v1=<hex>` header (HMAC-SHA256 of `t + "." + rawBody` with the endpoint's signing secret; the same value is also sent as `Mooj-Signature`).
+
+```json
+{
+  "id": "evt_card_cleared_8f2a...",
+  "type": "card.cleared",
+  "created": 1762182000,
+  "data": { "card_id": "card_8f2a...", "card_last4": "8339", "amount": 1.98, "fees": 0, "merchant": "NAMECHEAP", "network": "visa", "balance_after": 30.98, "provider_transaction_id": "..." }
+}
+```
+
+### Cards
+
+#### card.authorized
+The merchant charged an issued card. The money is held; `settled` on the spend is still `false`.
+
+| Field | Type | |
+| --- | --- | --- |
+| `card_id` | string | The card. |
+| `card_last4` | string | |
+| `amount` | number | Dollars. |
+| `merchant` | string | The merchant name as the network reports it. |
+| `network` | string | `visa` or `mastercard`. |
+| `provider_transaction_id` | string | The network's transaction id. |
+
+#### card.cleared
+The network settled a charge, usually by the next day. The wallet balance moved.
+
+| Field | Type | |
+| --- | --- | --- |
+| `card_id`, `card_last4`, `merchant`, `network`, `provider_transaction_id` | | As above. |
+| `amount` | number | The settled amount in dollars. |
+| `fees` | number | Network fees in dollars, when any. |
+| `balance_after` | number | The wallet balance after the charge. |
+
+#### card.declined
+A charge on an issued card was refused.
+
+| Field | Type | |
+| --- | --- | --- |
+| `card_id`, `card_last4`, `amount`, `merchant`, `network`, `provider_transaction_id` | | As above. |
+| `decline_reason` | string | The reason. A second charge on a used single-use card is the guard working. |
+
+### Checkouts
+
+Every checkout event's `data` carries `checkout_id`, and its `id` is derived from it, so a redelivery has the same id.
+
+#### checkout.submitted
+The run paid. `order_id` and `order_total` are on the checkout read.
+
+#### checkout.needs_login
+The run stopped at a sign-in page.
+
+| Field | Type | |
+| --- | --- | --- |
+| `login_url` | string | The page the browser stopped on. Read `login_check` and `connect_url` from `GET /v1/checkout/{id}`. |
+
+#### checkout.needs_card_approval
+A run paying with the person's own card reached the review and waits for the cardholder.
+
+| Field | Type | |
+| --- | --- | --- |
+| `approval_url` | string | Send it to the cardholder. |
+| `approval_expires_at` | string | When the link stops working. |
+| `amount_display` | string | The total, e.g. `"60.90 AED"`. |
+| `card_last4` | string | |
+
+#### checkout.blocked
+AgentPay stopped the run.
+
+| Field | Type | |
+| --- | --- | --- |
+| `reason` | string | `approval_timeout`, `engine_error`, `max_iterations`, `payment_unknown`, `site_busy`, `unreachable`, or the wall the run met. |
+| `card_last4` | string | Only on `payment_unknown` with a connected card. |
+
+### Money
+
+#### money.funded
+A top-up landed in the wallet.
+
+| Field | Type | |
+| --- | --- | --- |
+| `amount` | number | Dollars. |
+| `currency` | string | `USD`. |
+| `method` | string | `card`, `stablecoin`, `bank` or `gift`. |
+| `rail` | string | On a bank transfer: `ach`, `wire_domestic`, `wire_international`, `uae_local`. |
+| `reference_code` | string | On a bank transfer, the memo code it was matched by. |
+| `funding_event_id` | string | |
+| `provider_ref` | string | Stripe's reference on a card or stablecoin top-up. |
+| `balance_after` | number | The wallet balance after the credit. |
+
+### The header
+
+```text
+Joomjoo-Signature: t=1762182000,v1=5f1d2c...
+```
+
+`t` is the unix time of the delivery in seconds. `v1` is `HMAC_SHA256(secret, t + "." + rawBody)` as lowercase hex. The same value is also sent as `Mooj-Signature`.
+
+### Verify
+
+```javascript Node
+import crypto from "node:crypto";
+
+export function verify(rawBody, header, secret) {
+  const parts = Object.fromEntries(header.split(",").map((p) => p.split("=")));
+  const expected = crypto.createHmac("sha256", secret).update(parts.t + "." + rawBody).digest("hex");
+  return expected.length === parts.v1.length &&
+    crypto.timingSafeEqual(Buffer.from(expected), Buffer.from(parts.v1));
+}
+```
+```python Python
+import hmac, hashlib
+
+def verify(raw_body: bytes, header: str, secret: str) -> bool:
+    parts = dict(p.split("=", 1) for p in header.split(","))
+    msg = parts["t"].encode() + b"." + raw_body
+    expected = hmac.new(secret.encode(), msg, hashlib.sha256).hexdigest()
+    return hmac.compare_digest(expected, parts["v1"])
+```
+- Compute over the raw bytes you received. Parsing and re-serialising the JSON changes the string and breaks the signature.
+- Compare in constant time.
+- Reject a `t` more than a few minutes old to shut out replays.
+- Answer 2xx only after the signature verified; anything else is retried.
+
+### Other headers
+
+| Header | Value |
 | --- | --- |
-| 200 | Success. |
-| 400 | `invalid_request`, `invalid_amount`: a required field is missing or invalid. `connection_not_found`: no connected connection with that id. `site_required`, `site_ambiguous`: the account has no stored login for that merchant, or several; pass `start_url`. `agent_required`: the account has several agents and none was named. |
-| 401 | `missing_api_key`, `invalid_api_key`, `expired_api_key` (the body carries `expired_at`). |
-| 402 | `insufficient_funds`: the requested cap exceeds the available wallet balance. `plan_limit`: the plan's cards a month or per-card cap is reached. `wallet_limit`, `funding_budget_reached`, `funding_unavailable`: a wallet fence refused a top-up. |
-| 404 | `card_not_found`, `spend_not_found`, `checkout_not_found`, `connection_not_found`, `account_not_found`: not found, or not owned by your account. |
-| 409 | `agent_paused`: resume the agent first. `busy`: the merchant session is busy with another run, retry shortly. |
-| 502 | `card_issue_failed`, `reveal_failed`, `close_failed`, `spend_status_failed`, `checkout_start_failed`, `connect_start_failed`, `enqueue_failed`: an upstream step failed; the message says which. Retry with the same `idempotency_key`. |
-| 500 | `server_error`, `checkout_create_failed`. |
+| `Joomjoo-Event-Type` | The event type, the same as `type` in the body. |
+| `Joomjoo-Event-Id` | The event id, the same as `id` in the body. Use it to deduplicate retries. |
+| `Mooj-Signature`, `Mooj-Event-Type`, `Mooj-Event-Id` | The same three values under the older names. |
 
-Error body
+## Errors
 
-```
+```json
 {
-"error": "insufficient\_funds",
-"request\_id": "req\_a1b2c3"
+  "error": "insufficient_funds",
+  "message": "Your wallet available is below this amount. Fund your wallet, then retry.",
+  "request_id": "req_a1b2c3"
 }
 ```
 
----
+### 400 Bad request
 
-## Postman collection 
+| Code | When |
+| --- | --- |
+| `invalid_request` | A required field is missing or malformed. The message names it. |
+| `invalid_amount` | `amount` is missing, not a number, or not above zero. |
+| `connection_not_found` | `connection_id` on a checkout names no connected connection on the account. |
+| `site_required` | The account has no stored login for that merchant. Pass `start_url`, or connect the merchant once in the console. |
+| `site_ambiguous` | The account has several logins for that merchant. `hosts` lists them; pass `start_url`. |
+| `agent_required` | The account has several agents and none was named. Name one in the console. |
 
-Prefer to click instead of curl? Import the AgentPay collection into Postman and every endpoint is ready to run.
+### 401 Unauthorized
 
-Import URL
+| Code | When |
+| --- | --- |
+| `missing_api_key` | No `Authorization: Bearer` header. |
+| `invalid_api_key` | The key is unknown or revoked. |
+| `expired_api_key` | The key passed its expiry. `expired_at` says when. |
 
-```
-https://agentpay.global/docs/agentpay.postman\_collection.json
-```
+### 402 Payment required
 
-1. In Postman, choose **Import** and paste the URL above (or download and drop the file in).
-2. Open the collection's **Variables** and set `apiKey` to your `mk_live_` key. `baseUrl` is already filled.
-3. Run **Cards → Create a card** to get your first card. The other requests reuse the same variables.
+| Code | When |
+| --- | --- |
+| `insufficient_funds` | The requested cap exceeds the wallet's `available`. |
+| `plan_limit` | The plan's cards a month, or per-card cap, is reached. `limit` carries the figure. |
+| `wallet_limit` | A top-up would take the wallet above its ceiling. |
+| `funding_budget_reached` | The account's funding budget for the period is reached. |
+| `funding_unavailable` | Top-ups are paused for the moment. Try later. |
+| `funding_refused` | A fence refused the top-up for another reason; `code` carries it. |
 
-The collection sets `Authorization: Bearer {{apiKey}}` at the collection level, so every request inherits your key automatically.
+### 404 Not found
 
-## Agent skills 
+| Code | When |
+| --- | --- |
+| `card_not_found` | No such card on the account. On `DELETE /v1/cards/{id}`: no such connected card (an issued card is closed, not removed). On a checkout with `own_card_id`: no such connected card. |
+| `spend_not_found` | No such spend on the account. |
+| `checkout_not_found` | No such checkout on the account, including a `resume_of` that is not yours. |
+| `connection_not_found` | No such connection on the account. |
+| `account_not_found` | The key's account could not be loaded. |
+| `not_found` | No route for the method and path. |
 
-Everything below is also one public repository, [github.com/Kato-Official/agentpay-skills](https://github.com/Kato-Official/agentpay-skills), with the full reference and the Postman collection. Install the skill into any agent (Claude Code, Codex, Cursor, Gemini CLI and more) with `npx skills add Kato-Official/agentpay-skills`.
+### 409 Conflict
 
-Teach your agent to use AgentPay in one paste. The AgentPay console (**Developer → Agent skills**) ships ready tool files for each stack:
+| Code | When |
+| --- | --- |
+| `agent_paused` | The person paused the agent in the console. Resume it there. |
+| `busy` | The merchant session is running another checkout. Retry shortly with the same `idempotency_key`. |
+| `not_resumable` | The `resume_of` run left nothing in the basket to continue from. Start again. |
 
-Claude Code / AGENTS.md
+### 500 and 502 Upstream
 
-Two files: `SKILL.md` (save as `.claude/skills/agentpay/SKILL.md`, Claude Code loads it by itself) and `AGENTS.md` (drop next to your agent's code; Codex, Cursor and most agents read it). Both carry the four tools, the ten checkout statuses and the rules.
+| Code | When |
+| --- | --- |
+| `server_error` | An unexpected failure. Quote the `request_id`. |
+| `checkout_create_failed` | The run document could not be created. |
+| `card_issue_failed`, `reveal_failed`, `close_failed`, `remove_failed`, `connect_failed` | A card step failed upstream; the message says which. |
+| `spend_status_failed`, `wallet_read_failed` | A read failed upstream. |
+| `checkout_start_failed`, `enqueue_failed` | The engine could not be started. On `enqueue_failed` the body carries the `checkout_id` that was created and marked `error`. |
+| `connect_start_failed`, `disconnect_failed` | A connection step failed. Retry. |
+| `funding_session_failed`, `bank_transfer_failed` | The top-up could not be opened or recorded. |
 
-Anthropic tool-use
+### 503 Unavailable
 
-JSON tool schema for the Claude API.
+| Code | When |
+| --- | --- |
+| `own_card_unavailable` | Connecting a person's own card is not switched on for the account. |
+| `unavailable` | The engine refused the run for the moment. Try again shortly. |
 
-OpenAI function tools
+## SDKs and agent files
 
-JSON tool schema for the OpenAI API.
-
-Google Gemini
-
-Function declarations for the Gemini API.
-
-Each file exposes the same four tools: `issue_card`, `complete_purchase`, `get_checkout_status`, and `get_spend_status`.
-
-## SDKs 
-
-Official SDKs wrap this API so you do not have to hand-roll requests. Same surface in every language: `cards`, `spend`, `checkout`, `connections`.
-
-Node
-
-`npm install @agentpay-global/sdk` · [npmjs.com/package/@agentpay-global/sdk](https://www.npmjs.com/package/@agentpay-global/sdk)
-
-Python
-
-`pip install agentpay-global` · [pypi.org/project/agentpay-global](https://pypi.org/project/agentpay-global/)
-
-MCP server
-
-`npx -y @agentpay-global/mcp` · [npmjs.com/package/@agentpay-global/mcp](https://www.npmjs.com/package/@agentpay-global/mcp)
-
-Node
-
-```
-import { AgentPay } from "@agentpay-global/sdk";
-const agentpay = new AgentPay(process.env.AGENTPAY\_API\_KEY);
-const card = await agentpay.cards.create({ amount: 20, merchant: "namecheap", single\_use: true });
-```
-
-Python
-
-```
-from agentpay import AgentPay
-agentpay = AgentPay(api\_key=os.environ["AGENTPAY\_API\_KEY"])
-card = agentpay.cards.create(amount=20, merchant="namecheap", single\_use=True)
-```
-
-Agent (MCP)
-
-```
-{
-"mcpServers": {
-"agentpay": {
-"command": "npx",
-"args": ["-y", "@agentpay-global/mcp"],
-"env": { "AGENTPAY\_API\_KEY": "YOUR\_API\_KEY" }
-}
-}
-}
-```
-
-AgentPay API v1 · Base URL `https://api.joomjoo.com` · Questions? Reach the team from the console.
+- Node: `npm install @agentpay-global/sdk`
+- Python: `pip install agentpay-global` (import `agentpay`)
+- MCP: `npx -y @agentpay-global/mcp` with `AGENTPAY_API_KEY`
+- Skill, AGENTS.md and tool files: `npx skills add Kato-Official/agentpay-skills`
+- Postman: https://agentpay.global/docs/agentpay.postman_collection.json
