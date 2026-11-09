@@ -66,8 +66,10 @@ def get_wallet() -> dict:
 
 @tool
 def create_topup_link(amount: float, success_url: str = "", cancel_url: str = "") -> dict:
-    """When the wallet is short: a Stripe top-up page for `amount` US dollars.
-    Give the returned url to the person; the wallet is credited when Stripe confirms.
+    """When the wallet is short: a Stripe top-up page for `amount` US dollars, paid by card.
+    Give the returned url to the person. They pay `total`, which is `amount` plus Stripe's own
+    fee at cost (the result carries `fee`, `total` and `fee_note`: tell the person the total);
+    the wallet is credited `amount` when Stripe confirms. A bank transfer has no fee.
     Never type a card yourself.
     """
     return agentpay.wallet.create_funding_session(

@@ -99,13 +99,21 @@
       },
       {
         "name": "create_topup_link",
-        "description": "When the wallet is short: make a top-up link for `amount` US dollars and give the url to the person. It opens a Stripe page (card or stablecoin); the wallet is credited the moment Stripe confirms. Never type a card yourself. POST /v1/wallet/funding-sessions.",
+        "description": "When the wallet is short: make a top-up link for `amount` US dollars and give the url to the person. It opens a Stripe page for a card, or for USDC with method stablecoin. The person pays `total`, which is `amount` plus Stripe's own fee at cost (the response carries `fee`, `total` and `fee_note`: tell the person the total); the wallet is credited `amount` the moment Stripe confirms. A bank transfer has no fee. Never type a card yourself. POST /v1/wallet/funding-sessions.",
         "parameters": {
           "type": "object",
           "properties": {
             "amount": {
               "type": "number",
-              "description": "US dollars to add."
+              "description": "US dollars to add to the wallet. The fee is added on top."
+            },
+            "method": {
+              "type": "string",
+              "enum": [
+                "card",
+                "stablecoin"
+              ],
+              "description": "card (default) or stablecoin (USDC). One Stripe page serves one method."
             },
             "success_url": {
               "type": "string",

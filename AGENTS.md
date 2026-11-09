@@ -92,7 +92,7 @@ curl -s https://api.joomjoo.com/v1/wallet/funding-sessions \
   -d '{"amount": 50, "success_url": "https://yourapp.example/funded"}'
 ```
 
-Returns a Stripe Checkout `url`. Give it to the person; Stripe takes a card or stablecoin; the wallet is credited the moment Stripe confirms (webhook `money.funded`). Never type a card yourself, never ask the person for their card number. For a bank transfer, `POST /v1/wallet/bank-transfers` with `amount` and `rail` (`ach`, `wire_domestic`, `wire_international`, `uae_local`) returns the account to send to and a `reference_code` for the memo; the money is pending until it lands.
+Returns a Stripe Checkout `url`, plus `fee` and `total`. Give the url to the person and tell them the total: a card or stablecoin top-up carries Stripe's own fee at cost, added on top (card 2.9% + $0.35 for a US business, 4.4% + $0.35 for any other; stablecoin 1.5%, sent with `"method": "stablecoin"`), and the wallet is credited exactly `amount` the moment Stripe confirms (webhook `money.funded`). A bank transfer has no fee. Never type a card yourself, never ask the person for their card number. For a bank transfer, `POST /v1/wallet/bank-transfers` with `amount` and `rail` (`ach`, `wire_domestic`, `wire_international`, `uae_local`) returns the account to send to and a `reference_code` for the memo; the money is pending until it lands.
 
 ## Rules, always
 

@@ -817,6 +817,87 @@ curl -X DELETE https://api.joomjoo.com/v1/connections/conn_5d2b... \
   -H "Authorization: Bearer $AGENTPAY_API_KEY"
 ```
 
+## undefined
+
+### Read what AgentPay knows about a store
+
+`GET /v1/merchants/{host}`
+
+What earlier checkouts have shown about one store: what it runs on, how it takes payment, whether it asks for an account, and what typically goes wrong there. Read it before a checkout so the task settles what the store will ask.
+
+**Path parameters**
+
+| Field | Type | Description |
+| --- | --- | --- |
+| `host` | string, required | The store's bare host name. No scheme, no path. |
+
+**Response** 200
+
+| Field | Type | Description |
+| --- | --- | --- |
+| `known` | boolean | `false` when AgentPay has not run on this store. The other fields are then absent, except `host` and `message`. |
+| `host` | string | The host, lowercase, without `www.`. |
+| `display_name` | string | The store's name. |
+| `platform` | string | The shop platform, or `null` when not identified. One of `shopify`, `woocommerce`, `magento`, `bigcommerce`, `wix`, `squarespace`, `salesforce`, `custom`. |
+| `pickup_system` | string | The pickup or collection system when one was seen, else `null`. |
+| `payment_provider` | string | The payment provider behind the card form, or `null`. One of `stripe`, `adyen`, `checkout_com`, `braintree`, `paypal`, `shopify_payments`, `square`, `other`. |
+| `three_ds` | string | Whether a bank challenge (3-D Secure) has appeared here. AgentPay clears it for an issued card. One of `seen`, `unknown`. |
+| `login_required` | string | Whether the store asks for an account. One of `none`, `optional`, `required`, `unknown`. |
+| `guest_checkout` | string | Whether a checkout without an account has reached the order review. One of `works`, `wall`, `unknown`. |
+| `activity` | string | `observed` when enough accounts have run here to describe activity; `limited` otherwise, and `runs`, `last_seen` and `warnings` are then empty. One of `observed`, `limited`. |
+| `runs` | string | How much AgentPay has run here, in words. One of `one`, `a few`, `many`. |
+| `last_seen` | string | The month of the latest run, `YYYY-MM`. |
+| `warnings` | array | What has gone wrong on this store. |
+|   `family` | string | The kind of wall. One of `login_wall`, `bot_wall`, `site_broken`, `pickup_mismatch`, `payment_failed`, `no_card_payment`, `choice_needed`. |
+|   `text` | string | The warning in words. |
+|   `seen` | string | How often. One of `one`, `a few`, `many`. |
+| `tips` | array | Short facts about the store, reviewed by AgentPay. |
+| `as_of` | string | The day this view was computed. It is refreshed at most once a day. |
+| `request_id` | string | The request id, also in the `X-Mooj-Request-Id` header. |
+
+```json
+{
+  "known": true,
+  "host": "namecheap.com",
+  "display_name": "Namecheap",
+  "platform": "custom",
+  "pickup_system": null,
+  "payment_provider": "stripe",
+  "three_ds": "seen",
+  "login_required": "required",
+  "guest_checkout": "wall",
+  "activity": "observed",
+  "runs": "many",
+  "last_seen": "2026-11",
+  "warnings": [
+    {
+      "family": "login_wall",
+      "text": "The store asks for an account before checkout.",
+      "seen": "many"
+    }
+  ],
+  "tips": [
+    "Account balance is offered before the card: the task should say to pay by card."
+  ],
+  "as_of": "2026-11-09",
+  "request_id": "req_a1b2c3"
+}
+```
+
+**Errors**
+
+| Status | Code | When |
+| --- | --- | --- |
+| 400 | `invalid_host` | The path is not a bare host name. |
+| 403 | `not_eligible` | The account has not finished signing up. |
+| 429 | `rate_limited` | More than 30 lookups in an hour or 200 in a day on the account. `retry_after_s` says when to try again. |
+| 502 | `merchant_read_failed` | The store could not be read. Retry. |
+
+```bash
+curl https://api.joomjoo.com/v1/merchants/namecheap.com \
+  -H "Authorization: Bearer $AGENTPAY_API_KEY"
+```
+
 ## Wallet
 
 ### Read the wallet
@@ -893,13 +974,14 @@ curl https://api.joomjoo.com/v1/wallet \
 
 `POST /v1/wallet/funding-sessions`
 
-Open a Stripe Checkout page for the amount. Give url to the person; the wallet is credited the moment Stripe confirms. A card number never passes through the API.
+Open a Stripe Checkout page for the amount. Give url to the person; the wallet is credited the moment Stripe confirms. A card or stablecoin top-up carries Stripe's own fee, at cost, added on top: the person pays `total` and the wallet gains `amount`. A bank transfer has no fee. A card number never passes through the API.
 
 **Body** (application/json)
 
 | Field | Type | Description |
 | --- | --- | --- |
-| `amount` | number, required | Dollars to add, above zero. |
+| `amount` | number, required | Dollars to add to the wallet, above zero. The fee is added on top of it. |
+| `method` | string | `card` (the default) or `stablecoin` (USDC). One Stripe page serves one method. |
 | `success_url` | string | Where the person lands after paying. Must be https. Defaults to the AgentPay console. |
 | `cancel_url` | string | Where the person lands if they cancel. Must be https. Defaults to the AgentPay console. |
 
@@ -909,11 +991,15 @@ Open a Stripe Checkout page for the amount. Give url to the person; the wallet i
 | --- | --- | --- |
 | `funding_session_id` | string | The Stripe Checkout session id. |
 | `url` | string | The page to open for the person. |
-| `amount` | number |  |
+| `amount` | number | What the wallet gains. |
 | `amount_display` | string |  |
+| `method` | string | `card` or `stablecoin`. |
+| `fee` | number | Stripe's fee for this top-up, in dollars, added on top of `amount`. A card costs 2.9% + $0.35 for a US business and 4.4% + $0.35 for any other; a stablecoin payment costs 1.5%. |
+| `total` | number | What the person pays on the Stripe page: `amount` plus `fee`. |
 | `status` | string | `open`. |
-| `pays_with` | string | `card or stablecoin on the Stripe page`. |
+| `pays_with` | string | `a card on the Stripe page` or `USDC on the Stripe page`. |
 | `credited` | string | When the wallet is credited, in plain words. |
+| `fee_note` | string | The fee in plain words, written for an agent to repeat to the person. |
 | `request_id` | string | The request id, also in the `X-Mooj-Request-Id` header. |
 
 ```json
@@ -922,9 +1008,13 @@ Open a Stripe Checkout page for the amount. Give url to the person; the wallet i
   "url": "https://checkout.stripe.com/c/pay/...",
   "amount": 50,
   "amount_display": "$50.00",
+  "method": "card",
+  "fee": 2.55,
+  "total": 52.55,
   "status": "open",
-  "pays_with": "card or stablecoin on the Stripe page",
-  "credited": "the wallet is credited the moment Stripe confirms; subscribe to money.funded to know",
+  "pays_with": "a card on the Stripe page",
+  "credited": "the wallet is credited `amount` the moment Stripe confirms; subscribe to money.funded to know",
+  "fee_note": "The person pays `total`: `amount` goes to the wallet and `fee` is Stripe's own fee, passed on at cost. If Stripe charges less than `fee`, the difference is refunded to the payment method automatically. A bank transfer (POST /v1/wallet/bank-transfers) has no fee.",
   "request_id": "req_a1b2c3"
 }
 ```
@@ -934,7 +1024,7 @@ Open a Stripe Checkout page for the amount. Give url to the person; the wallet i
 | Status | Code | When |
 | --- | --- | --- |
 | 400 | `invalid_amount` | `amount` is missing or not above zero, or the amount was refused as malformed. |
-| 400 | `invalid_request` | `success_url` or `cancel_url` is not an https address. |
+| 400 | `invalid_request` | `success_url` or `cancel_url` is not an https address, or `method` is not `card` or `stablecoin`. |
 | 402 | `wallet_limit` | The top-up would take the wallet above its ceiling. |
 | 402 | `funding_budget_reached` | The account's funding budget for the period is reached. |
 | 402 | `funding_unavailable` | Top-ups are paused for the moment. |
