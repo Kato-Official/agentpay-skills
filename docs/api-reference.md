@@ -503,7 +503,8 @@ The current state of a run. Poll every five to ten seconds until status is submi
 | `approval_url` | string | On `needs_card_approval`: the link for the cardholder's phone. |
 | `approval_expires_at` | string | On `needs_card_approval`: when the link stops working. |
 | `payment_unknown` | boolean | `true` when the run paid but could not read the merchant's confirmation. Check the merchant account before retrying. |
-| `error_reason` | string | On `blocked` or `error`: why. |
+| `error_reason` | string | On `blocked` or `error`: the legacy one-line reason. Prefer `stop`. |
+| `stop` | object | Why the run is paused or ended, who acts next and what to do, built from verified facts. Present on `needs_login`, `needs_answer`, `awaiting_approval`, `needs_card_approval`, `blocked`, `canceled` and `error`; `null` while the run works and on `submitted`. See [Why a checkout stops](/guides/complete-a-checkout#why-a-checkout-stops). |
 | `request_id` | string | The request id, also in the `X-Mooj-Request-Id` header. |
 
 ```json
@@ -529,6 +530,19 @@ The current state of a run. Poll every five to ten seconds until status is submi
   "approval_expires_at": null,
   "payment_unknown": false,
   "error_reason": null,
+  "stop": {
+    "code": "approval_required",
+    "on": "approver",
+    "message": "The order is ready: 1.98 USD at namecheap. Approve it to pay.",
+    "next": "Approve or cancel the order in the console.",
+    "continue": "same_run",
+    "payment_state": "not_attempted",
+    "card_closed": false,
+    "details": {
+      "total": "1.98 USD"
+    },
+    "transition_id": "st_3f9c..."
+  },
   "request_id": "req_a1b2c3"
 }
 ```
@@ -1161,17 +1175,18 @@ A charge on an issued card was refused.
 
 ### Checkouts
 
-Every checkout event's `data` carries `checkout_id`, and its `id` is derived from it, so a redelivery has the same id.
+Every checkout event's `data` carries `checkout_id`, `status` and, on every pause or ending, the same `stop` object the checkout read returns (`code`, `on`, `message`, `next`, `continue`, `payment_state`, `card_closed`, `details`, `transition_id`; see [Why a checkout stops](https://agentpay.global/docs/guides/complete-a-checkout/#why-a-checkout-stops)). The event `id` is derived from `checkout_id` and `stop.transition_id`, so a redelivery of the same pause or ending has the same id and a second pause of the same run is a new event. `payment_unknown` rides along as a boolean.
 
 #### checkout.submitted
 The run paid. `order_id` and `order_total` are on the checkout read.
 
 #### checkout.needs_login
-The run stopped at a sign-in page.
+The run stopped at a wall it needs a person for: a sign-in page, or a code the merchant sent to the phone or inbox in the form. `stop.code` tells which (`merchant_sign_in_required`, `merchant_code_required`, `sign_in_check_inconclusive`, `passkey_setup_required`).
 
 | Field | Type | |
 | --- | --- | --- |
 | `login_url` | string | The page the browser stopped on. Read `login_check` and `connect_url` from `GET /v1/checkout/{id}`. |
+| `stop` | object | Why, who acts, what to do. |
 
 #### checkout.needs_card_approval
 A run paying with the person's own card reached the review and waits for the cardholder.
@@ -1184,12 +1199,22 @@ A run paying with the person's own card reached the review and waits for the car
 | `card_last4` | string | |
 
 #### checkout.blocked
-AgentPay stopped the run.
+AgentPay stopped the run without paying, or with the payment in doubt.
 
 | Field | Type | |
 | --- | --- | --- |
-| `reason` | string | `approval_timeout`, `engine_error`, `max_iterations`, `payment_unknown`, `site_busy`, `unreachable`, or the wall the run met. |
+| `reason` | string | The legacy reason, unchanged: `approval_timeout`, `engine_error`, `max_iterations`, `payment_unknown`, `site_busy`, `unreachable`, `no_context`, or the wall the run met. Prefer `stop.code`. |
+| `stop` | object | Why, who acts, what to do, and `payment_state`. When `payment_state` is `attempted` or `uncertain`, check the merchant before starting another checkout. |
+| `status` | string | `blocked` or `error`. |
 | `card_last4` | string | Only on `payment_unknown` with a connected card. |
+
+#### checkout.canceled
+The person stopped the run, or it continued as a new checkout after a sign-in. `stop.code` is `canceled_by_you` or `continued_as_new_run`; a declined own-card approval also ends here.
+
+| Field | Type | |
+| --- | --- | --- |
+| `reason` | string | `canceled`, or the approval outcome. |
+| `stop` | object | As above. |
 
 ### Money
 
