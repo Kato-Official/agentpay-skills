@@ -1096,7 +1096,7 @@ Declare a transfer and get the account to send it to, with a reference code for 
   "reference_code": "7K2QW9PD",
   "pending_balance": 500,
   "instructions": {
-    "beneficiary_name": "Joomjoo, LLC",
+    "beneficiary_name": "AgentPay AI Inc.",
     "account_number": "...",
     "routing_number": "...",
     "bank_name": "Column N.A.",
@@ -1130,7 +1130,7 @@ curl -X POST https://api.agentpay.global/v1/wallet/bank-transfers \
 
 ## Webhooks
 
-Register an endpoint in the console under Developer, Webhooks. Each delivery is `{ "id", "type", "created", "data" }` with a `Joomjoo-Signature: t=<unix>,v1=<hex>` header (HMAC-SHA256 of `t + "." + rawBody` with the endpoint's signing secret; the same value is also sent as `Mooj-Signature`).
+Register an endpoint in the console under Developer, Webhooks. Each delivery is `{ "id", "type", "created", "data" }` with an `AgentPay-Signature: t=<unix>,v1=<hex>` header (HMAC-SHA256 of `t + "." + rawBody` with the endpoint's signing secret; the same value is also sent under the earlier header names).
 
 ```json
 {
@@ -1235,10 +1235,10 @@ A top-up landed in the wallet.
 ### The header
 
 ```text
-Joomjoo-Signature: t=1762182000,v1=5f1d2c...
+AgentPay-Signature: t=1762182000,v1=5f1d2c...
 ```
 
-`t` is the unix time of the delivery in seconds. `v1` is `HMAC_SHA256(secret, t + "." + rawBody)` as lowercase hex. The same value is also sent as `Mooj-Signature`.
+`t` is the unix time of the delivery in seconds. `v1` is `HMAC_SHA256(secret, t + "." + rawBody)` as lowercase hex. The same value is also sent under the earlier header names, so an integration written before keeps verifying.
 
 ### Verify
 
@@ -1270,9 +1270,8 @@ def verify(raw_body: bytes, header: str, secret: str) -> bool:
 
 | Header | Value |
 | --- | --- |
-| `Joomjoo-Event-Type` | The event type, the same as `type` in the body. |
-| `Joomjoo-Event-Id` | The event id, the same as `id` in the body. Use it to deduplicate retries. |
-| `Mooj-Signature`, `Mooj-Event-Type`, `Mooj-Event-Id` | The same three values under the older names. |
+| `AgentPay-Event-Type` | The event type, the same as `type` in the body. |
+| `AgentPay-Event-Id` | The event id, the same as `id` in the body. Use it to deduplicate retries. |
 
 ## Errors
 
