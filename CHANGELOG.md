@@ -2,6 +2,12 @@
 
 All notable changes to the skill, the tool files and the reference in this repository. The packages have their own versions on npm and PyPI.
 
+## 2026-11-25, the API address is api.agentpay.global
+
+- The base URL is now `https://api.agentpay.global`. The old address `https://api.joomjoo.com` keeps working and reaches the same API, so nothing already installed breaks.
+- The pages a cardholder opens (connect a card, approve a purchase, claim a shared card) are now on `https://claim.agentpay.global`.
+- Matches @agentpay-global/sdk 0.3.1 and PyPI agentpay-global 0.3.1, whose default base URL is the new address.
+
 ## 2026-10-31, AgentPay
 
 - The product is AgentPay. The repository is now `Kato-Official/agentpay-skills` (the old `joomjoo-skills` address redirects), the skill is `agentpay`, the key variable is `AGENTPAY_API_KEY` (`JOOMJOO_API_KEY` is still read by the MCP server), the classes are `AgentPay` and `AgentPayError`.

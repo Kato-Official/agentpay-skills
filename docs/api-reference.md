@@ -4,14 +4,14 @@ Generated from the same specs as the docs site. The full documentation, with gui
 
 | | |
 | --- | --- |
-| **Base URL** | `https://api.joomjoo.com` |
+| **Base URL** | `https://api.agentpay.global` |
 | **Version** | Every endpoint is under `/v1`. |
 | **Auth** | `Authorization: Bearer mk_live_...` on every request. See [authentication](https://agentpay.global/docs/authentication/). |
 | **Content type** | `application/json` for every request body. |
 | **Amounts** | US dollars as plain numbers: `"amount": 20` is $20.00. Card and wallet math is exact to the cent internally. |
 | **Request ids** | Every response carries `X-Mooj-Request-Id`, echoed as `request_id` in the body. |
 
-> The host still carries the company's older name. `api.joomjoo.com` is the AgentPay API, and the older Cloud Run address keeps answering for integrations written before the rename.
+> The host still carries the company's older name. `api.agentpay.global` is the AgentPay API, and the older Cloud Run address keeps answering for integrations written before the rename.
 
 ## Endpoints
 
@@ -57,7 +57,7 @@ Mint a virtual card capped at amount, dedicated to one merchant. The response is
 
 | Field | Type | Description |
 | --- | --- | --- |
-| `amount` | number, required | The spend cap in US dollars, above zero. The per-card ceiling is 5,000. |
+| `amount` | number, required | The spend cap in US dollars, above zero. The per-card ceiling is 3,000. |
 | `merchant` | string | The merchant the card is for, e.g. `namecheap`. Shown in the console. Defaults to `agent`. |
 | `single_use` | boolean, default `true` | A single-use card freezes itself after its first charge. `false` mints a multi-use card that takes charges until the cap is reached or you close it. |
 | `network` | string, default `auto` | Which network to mint on. One of `auto`, `visa`, `mastercard`. |
@@ -102,7 +102,7 @@ Mint a virtual card capped at amount, dedicated to one merchant. The response is
 | 502 | `card_issue_failed` | The issuer refused or failed. The message says why. |
 
 ```bash
-curl -X POST https://api.joomjoo.com/v1/cards \
+curl -X POST https://api.agentpay.global/v1/cards \
   -H "Authorization: Bearer $AGENTPAY_API_KEY" \
   -H "Content-Type: application/json" \
   -d '{"amount":20,"merchant":"namecheap","single_use":true}'
@@ -152,7 +152,7 @@ Return the full card number, the security code and the expiry. Reveal only at th
 | 502 | `reveal_failed` | The issuer could not return the card. Retry. |
 
 ```bash
-curl https://api.joomjoo.com/v1/cards/card_8f2a... \
+curl https://api.agentpay.global/v1/cards/card_8f2a... \
   -H "Authorization: Bearer $AGENTPAY_API_KEY"
 ```
 
@@ -196,7 +196,7 @@ Close an issued card and release any unused reserve back to the wallet.
 | 502 | `close_failed` | The issuer could not close the card. Retry. |
 
 ```bash
-curl -X POST https://api.joomjoo.com/v1/cards/card_8f2a.../close \
+curl -X POST https://api.agentpay.global/v1/cards/card_8f2a.../close \
   -H "Authorization: Bearer $AGENTPAY_API_KEY"
 ```
 
@@ -255,7 +255,7 @@ Every card on the account: the person's connected cards first (source own), then
 ```
 
 ```bash
-curl https://api.joomjoo.com/v1/cards \
+curl https://api.agentpay.global/v1/cards \
   -H "Authorization: Bearer $AGENTPAY_API_KEY"
 ```
 
@@ -281,7 +281,7 @@ The card is encrypted on the cardholder's device before it leaves the page. Agen
 ```json
 {
   "connect_id": "6f1c...",
-  "connect_url": "https://claim.joomjoo.com/add/6f1c...#...",
+  "connect_url": "https://claim.agentpay.global/add/6f1c...#...",
   "expires_at": "2026-11-03T15:00:00.000Z",
   "status": "open",
   "instructions": "Send the link to the cardholder. They open it in Safari or Chrome on the phone they will approve purchases with, type the card once, and lock it with a passkey. The security code is never stored. Then GET /v1/cards shows it with source \"own\".",
@@ -297,7 +297,7 @@ The card is encrypted on the cardholder's device before it leaves the page. Agen
 | 502 | `connect_failed` | The link could not be created. Retry. |
 
 ```bash
-curl -X POST https://api.joomjoo.com/v1/cards/connect \
+curl -X POST https://api.agentpay.global/v1/cards/connect \
   -H "Authorization: Bearer $AGENTPAY_API_KEY"
 ```
 
@@ -339,7 +339,7 @@ Remove a connected card (source own) and withdraw any purchase waiting on it. An
 | 502 | `remove_failed` | The card could not be removed. Retry. |
 
 ```bash
-curl -X DELETE https://api.joomjoo.com/v1/cards/9b2e... \
+curl -X DELETE https://api.agentpay.global/v1/cards/9b2e... \
   -H "Authorization: Bearer $AGENTPAY_API_KEY"
 ```
 
@@ -393,7 +393,7 @@ Whether a card issued with POST /v1/cards was charged, and whether the charge se
 | 502 | `spend_status_failed` | The status could not be read. Retry. |
 
 ```bash
-curl https://api.joomjoo.com/v1/spend/spr_1c9d... \
+curl https://api.agentpay.global/v1/spend/spr_1c9d... \
   -H "Authorization: Bearer $AGENTPAY_API_KEY"
 ```
 
@@ -461,7 +461,7 @@ Asynchronous. AgentPay opens the merchant in its own browser, reaches the review
 | 502 | `checkout_start_failed` | The engine could not be started. Retry with the same `idempotency_key`. |
 
 ```bash
-curl -X POST https://api.joomjoo.com/v1/checkout \
+curl -X POST https://api.agentpay.global/v1/checkout \
   -H "Authorization: Bearer $AGENTPAY_API_KEY" \
   -H "Content-Type: application/json" \
   -d '{"task":"buy the domain example.click for 1 year","merchant":"namecheap","amount":20,"confirm_pay":false,"idempotency_key":"order-001"}'
@@ -554,7 +554,7 @@ The current state of a run. Poll every five to ten seconds until status is submi
 | 404 | `checkout_not_found` | No such checkout on your account. |
 
 ```bash
-curl https://api.joomjoo.com/v1/checkout/run_7a1e... \
+curl https://api.agentpay.global/v1/checkout/run_7a1e... \
   -H "Authorization: Bearer $AGENTPAY_API_KEY"
 ```
 
@@ -601,7 +601,7 @@ Start a reusable login at a merchant. Returns a connect_url, a live window on th
 | 502 | `connect_start_failed` | The live window could not be opened. Retry. |
 
 ```bash
-curl -X POST https://api.joomjoo.com/v1/connections \
+curl -X POST https://api.agentpay.global/v1/connections \
   -H "Authorization: Bearer $AGENTPAY_API_KEY" \
   -H "Content-Type: application/json" \
   -d '{"merchant":"amazon","user_ref":"user_42"}'
@@ -642,7 +642,7 @@ Call after the person signed in at the connect_url. The login is saved and the c
 | 404 | `connection_not_found` | No such connection on your account. |
 
 ```bash
-curl -X POST https://api.joomjoo.com/v1/connections/conn_5d2b.../complete \
+curl -X POST https://api.agentpay.global/v1/connections/conn_5d2b.../complete \
   -H "Authorization: Bearer $AGENTPAY_API_KEY"
 ```
 
@@ -686,7 +686,7 @@ Every connection on the account, newest first, each with its passkey layer.
 ```
 
 ```bash
-curl https://api.joomjoo.com/v1/connections \
+curl https://api.agentpay.global/v1/connections \
   -H "Authorization: Bearer $AGENTPAY_API_KEY"
 ```
 
@@ -735,7 +735,7 @@ One connection with its status and passkey layer. Poll it after a disconnect to 
 | 404 | `connection_not_found` | No such connection on your account. |
 
 ```bash
-curl https://api.joomjoo.com/v1/connections/conn_5d2b... \
+curl https://api.agentpay.global/v1/connections/conn_5d2b... \
   -H "Authorization: Bearer $AGENTPAY_API_KEY"
 ```
 
@@ -783,7 +783,7 @@ The person will not type the merchant password for the AgentPay passkey. The con
 | 404 | `connection_not_found` | No such connection on your account. |
 
 ```bash
-curl -X POST https://api.joomjoo.com/v1/connections/conn_5d2b.../passkey \
+curl -X POST https://api.agentpay.global/v1/connections/conn_5d2b.../passkey \
   -H "Authorization: Bearer $AGENTPAY_API_KEY" \
   -H "Content-Type: application/json" \
   -d '{"action":"skip"}'
@@ -827,7 +827,7 @@ End a connection. The AgentPay key is destroyed first, the saved session is dele
 | 502 | `disconnect_failed` | The passkey could not be revoked. Retry. |
 
 ```bash
-curl -X DELETE https://api.joomjoo.com/v1/connections/conn_5d2b... \
+curl -X DELETE https://api.agentpay.global/v1/connections/conn_5d2b... \
   -H "Authorization: Bearer $AGENTPAY_API_KEY"
 ```
 
@@ -908,7 +908,7 @@ What earlier checkouts have shown about one store: what it runs on, how it takes
 | 502 | `merchant_read_failed` | The store could not be read. Retry. |
 
 ```bash
-curl https://api.joomjoo.com/v1/merchants/namecheap.com \
+curl https://api.agentpay.global/v1/merchants/namecheap.com \
   -H "Authorization: Bearer $AGENTPAY_API_KEY"
 ```
 
@@ -980,7 +980,7 @@ The balance every card and checkout draws on, what is free to assign, what sits 
 | 502 | `wallet_read_failed` | The wallet could not be read. Retry. |
 
 ```bash
-curl https://api.joomjoo.com/v1/wallet \
+curl https://api.agentpay.global/v1/wallet \
   -H "Authorization: Bearer $AGENTPAY_API_KEY"
 ```
 
@@ -1045,7 +1045,7 @@ Open a Stripe Checkout page for the amount. Give url to the person; the wallet i
 | 502 | `funding_session_failed` | The Stripe page could not be opened. Retry. |
 
 ```bash
-curl -X POST https://api.joomjoo.com/v1/wallet/funding-sessions \
+curl -X POST https://api.agentpay.global/v1/wallet/funding-sessions \
   -H "Authorization: Bearer $AGENTPAY_API_KEY" \
   -H "Content-Type: application/json" \
   -d '{"amount":50,"success_url":"https://yourapp.example/funded"}'
@@ -1122,7 +1122,7 @@ Declare a transfer and get the account to send it to, with a reference code for 
 | 502 | `bank_transfer_failed` | The declaration could not be recorded. Retry. |
 
 ```bash
-curl -X POST https://api.joomjoo.com/v1/wallet/bank-transfers \
+curl -X POST https://api.agentpay.global/v1/wallet/bank-transfers \
   -H "Authorization: Bearer $AGENTPAY_API_KEY" \
   -H "Content-Type: application/json" \
   -d '{"amount":500,"rail":"wire_domestic","sent_on":"2026-11-03","idempotency_key":"topup-2026-11-03"}'
