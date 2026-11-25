@@ -41,7 +41,7 @@ Every file reads the key from the `AGENTPAY_API_KEY` environment variable, so th
 
 ## Where the data goes
 
-Every file in this repository talks to exactly one service: the AgentPay API at `https://api.joomjoo.com`, run by Joomjoo LLC. The skill and the tool files call it directly with the person's API key; the MCP server calls the same API on the agent's behalf. Tasks, merchant names, amounts and the resulting orders are stored in the person's AgentPay account so they can review and approve purchases in the console. Nothing is sent anywhere else. Privacy policy: https://agentpay.global/legal/privacy.html
+Every file in this repository talks to exactly one service: the AgentPay API at `https://api.agentpay.global`, run by Joomjoo LLC. The skill and the tool files call it directly with the person's API key; the MCP server calls the same API on the agent's behalf. Tasks, merchant names, amounts and the resulting orders are stored in the person's AgentPay account so they can review and approve purchases in the console. Nothing is sent anywhere else. Privacy policy: https://agentpay.global/legal/privacy.html
 
 ## The six tools
 
